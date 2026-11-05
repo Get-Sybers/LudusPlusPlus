@@ -1,0 +1,29 @@
+# yamllint configuration for the whole source (run by `make lint-yaml` and CI).
+extends: default
+
+ignore: |
+  .tools/
+  .venv/
+  ludus-reference/range-config.jsonschema
+
+rules:
+  line-length:
+    max: 160
+    level: warning
+  document-start: disable
+  comments-indentation: disable
+  comments:
+    min-spaces-from-content: 1
+  truthy:
+    allowed-values: ['true', 'false']
+    check-keys: false
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+  braces:
+    max-spaces-inside: 1
+  brackets:
+    max-spaces-inside: 1
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
