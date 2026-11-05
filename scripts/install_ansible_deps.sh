@@ -23,13 +23,25 @@ if ! ansible-galaxy collection install -r "$REFERENCE/ansible-requirements.yml" 
 fi
 
 shopt -s nullglob
+# What each template installs for itself at build time (templates/*/requirements.yml:
+# git pins and Galaxy names), so ansible-lint resolves the same content a build would.
+for req in "$ROOT"/templates/*/requirements.yml; do
+  echo "installing the build-time requirements of $(basename "$(dirname "$req")")"
+  if ! ansible-galaxy collection install --no-deps -r "$req" -p "$DEST"; then
+    echo "::warning::could not install $req; ansible-lint may report unknown modules" >&2
+  fi
+done
+
+# This source's own collections go LAST: a template's git pin may install an upstream
+# copy of the same collection (FGNW's get_sybers.templates, without the Metasploitable
+# role this copy keeps), and the repository's content is what the lint must resolve.
 for dir in "$ROOT"/ansible/collections/*/; do
   dir="${dir%/}"
-  [ -f "$dir/galaxy.yml" ] || continue
+  [[ -f "$dir/galaxy.yml" ]] || continue
   echo "installing source collection $(basename "$dir")"
   ansible-galaxy collection install --no-deps --force -p "$DEST" "$dir"
 done
 
 echo
 echo "export ANSIBLE_COLLECTIONS_PATH=\"$DEST\""
-if [ -n "${GITHUB_ENV:-}" ]; then echo "ANSIBLE_COLLECTIONS_PATH=$DEST" >> "$GITHUB_ENV"; fi
+if [[ -n "${GITHUB_ENV:-}" ]]; then echo "ANSIBLE_COLLECTIONS_PATH=$DEST" >> "$GITHUB_ENV"; fi

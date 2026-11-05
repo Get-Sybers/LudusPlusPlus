@@ -1,7 +1,7 @@
-> **Prerequisite:** this template's build runs the `get_sybers.templates` collection
-> shipped under `ansible/collections/` in this source. Install both together:
-> `ludus source add https://github.com/Get-Sybers/LudusPlusPlus --templates metasploitable-3-ub1404-x64-server-template --source-collections get_sybers.templates`.
-> The Ludus server exports the user's installed collections to template builds.
+> The build installs the `get_sybers.templates` collection (its `metasploitable_provision`
+> role and `provision` play) from this repository's git pin in `requirements.yml` before
+> importing, so the Ludus host needs access to github.com; nothing has to be selected at
+> `ludus source add` time.
 
 Ludus template for **Metasploitable3**, Ubuntu 14.04 flavor (`metasploitable3-ub1404`).
 This template uses the same Packer `null` source + `scripts/import.sh` pattern as

@@ -86,7 +86,7 @@ RULES: dict[str, tuple[str, str]] = {
     "T018": ("warning", "Ansible content a template runs must be installed by Ludus, shipped by this source, or installed by the building user"),
     "T019": ("warning", "deprecated Proxmox builder attributes should use their current form (boot_iso block, type + index)"),
     "T020": ("warning", "an orchestrated template must hand the Ludus build-time variables to its orchestration"),
-    "T021": ("error", "a template must not install Ansible content from outside its own directory (requirements.yml, galaxy_file)"),
+    "T021": ("error", "a template's requirements.yml must install from pinned sources only: no filesystem paths, git sources at a 40-hex commit, Galaxy entries at an exact version"),
     # Roles / collections
     "R001": ("error", "a role must have tasks/main.yml and meta/main.yml"),
     "R002": ("warning", "a role's meta/main.yml should define galaxy_info.description (shown in the catalog)"),
@@ -865,6 +865,7 @@ class TemplateContext:
         for item in doc.get("locals", []) or []:
             if isinstance(item, dict):
                 self.locals.update(item)
+        self.declared_collections: set[str] = set()
         self.sources: list[tuple[str, str, dict]] = []
         for item in doc.get("source", []) or []:
             if isinstance(item, dict):
@@ -1407,8 +1408,32 @@ class TemplateContext:
                         continue
                     if kind == "dir" or target.startswith(("../", "./", "/")) or "/../" in target:
                         self.l.report("T021", path, f"{section} entry {target!r} installs from a filesystem path; Ludus installs each templates/<name>/ directory on its own, so that path does not exist at build time. Ship the content under ansible/collections/ or ansible/roles/ of this source and rely on the ANSIBLE_COLLECTIONS_PATH / ANSIBLE_ROLES_PATH Ludus exports to builds", find_line(path, target.split("/")[-1]))
+                    else:
+                        # Pin discipline (FGNW's check-pins): a build must be reproducible, so a
+                        # git source pins a 40-hex commit (tags and branches move) and a Galaxy
+                        # entry an exact X.Y.Z version.
+                        version = str(entry.get("version") or "").strip() if isinstance(entry, dict) else ""
+                        is_git = kind == "git" or target.startswith(("git+", "git@")) or target.endswith(".git") or ".git#" in target
+                        if is_git and not re.fullmatch(r"[0-9a-f]{40}", version):
+                            self.l.report("T021", path, f"{section} entry {target!r}: a git source must pin a 40-hex commit SHA as its version (got {version or 'none'!r}); a tag or branch moves and the build is not reproducible", find_line(path, target.split("/")[-1]))
+                        elif not is_git and not re.fullmatch(r"\d+\.\d+\.\d+", version):
+                            self.l.report("T021", path, f"{section} entry {target!r}: pin an exact X.Y.Z version (got {version or 'none'!r}) so every build installs the same content", find_line(path, target.split("/")[-1]), level="warning")
+                        if section == "collections":
+                            fqcn = self._fqcn_from_requirement(target)
+                            if fqcn:
+                                self.declared_collections.add(fqcn)
             if label_text.startswith("requirements") and not any(typ == "ansible" and "galaxy_file" in body for typ, body in self.provisioners()) and "requirements" not in self.shell_local_text():
                 self.l.report("T021", path, "requirements.yml is not referenced by any provisioner; Ludus never installs it for a template (declare template dependencies in the README instead)", level="info")
+
+    @staticmethod
+    def _fqcn_from_requirement(target: str) -> str | None:
+        """namespace.name of a collection requirement: a galaxy name, or the last path
+        component of a git source (`git+https://host/repo.git#/path/ns.name`)."""
+        if re.fullmatch(r"[a-z0-9_]+\.[a-z0-9_]+", target):
+            return target
+        tail = target.split("#", 1)[1] if "#" in target else target
+        tail = tail.split(",", 1)[0].rstrip("/").rsplit("/", 1)[-1]
+        return tail if re.fullmatch(r"[a-z0-9_]+\.[a-z0-9_]+", tail) else None
 
     # -- T018 ------------------------------------------------------------------
 
@@ -1487,6 +1512,9 @@ class TemplateContext:
             if fqcn in ("ansible.builtin", "ansible.legacy"):
                 continue
             if fqcn in self.ref.ludus_collections:
+                continue
+            if fqcn in self.declared_collections:
+                self.report("T018", f"runs content from collection {fqcn}, which the template installs itself at build time from its requirements.yml (the Ludus host needs access to the pinned source)", level="info")
                 continue
             if fqcn in self.l.collection_fqcns:
                 self.report("T018", f"runs content from collection {fqcn}, shipped by this source; install it with the template (`ludus source add ... --source-collections {fqcn}`)", level="info")

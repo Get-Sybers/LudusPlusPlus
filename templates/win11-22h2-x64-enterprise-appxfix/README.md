@@ -1,7 +1,6 @@
-> **Prerequisite:** this template's build runs the `get_sybers.templates` collection
-> shipped under `ansible/collections/` in this source. Install both together:
-> `ludus source add https://github.com/Get-Sybers/LudusPlusPlus --templates win11-22h2-x64-enterprise-appxfix-template --source-collections get_sybers.templates`.
-> The Ludus server exports the user's installed collections to template builds.
+> The build installs the `get_sybers.templates` collection (the `ngen` play) from its git pin
+> in `requirements.yml` before the Ansible step, so the Ludus host needs access to github.com
+> and galaxy.ansible.com; nothing has to be selected at `ludus source add` time.
 
 The Windows 11 desktop derivative. **FGNW does not use this** — its workstations
 are Windows 10 (operator, 2026-08-06), see

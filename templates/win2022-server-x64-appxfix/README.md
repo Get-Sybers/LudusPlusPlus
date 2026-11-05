@@ -1,8 +1,3 @@
-> **Prerequisite:** this template's build runs the `get_sybers.templates` collection
-> shipped under `ansible/collections/` in this source. Install both together:
-> `ludus source add https://github.com/Get-Sybers/LudusPlusPlus --templates win2022-server-x64-appxfix-template --source-collections get_sybers.templates`.
-> The Ludus server exports the user's installed collections to template builds.
-
 A local derivative of the stock `packer/win2022-server-x64` template. The
 stock directory ships inside the Ludus install: it is overwritten by
 `ludus-server --update`, so it cannot carry a local fix without joining the
@@ -22,8 +17,8 @@ Deploy-time sysprep (`Sysprep Windows VMs` play in
 package is "installed for a user, but not provisioned for all users". The
 deploy symptom is `Timeout when waiting for <ip>:5986 to stop`. A deploy-time
 rescue removes the package and retries sysprep, but this burns the full 600 s
-`Wait for WinRM to stop` timeout per wave (issue
-The original fix (issue
+`Wait for WinRM to stop` timeout per wave.
+The original fix stripped the provisioned packages at bake
 time, but the blocker **re-arises at runtime**: Edge's Win32 updater can
 re-register a per-user Edge AppX on a running clone between the end of wave N
 and the start of wave N+1 — and since the bake stripped the *provisioned*
@@ -44,6 +39,7 @@ reference `win2022-server-x64-appxfix-template` explicitly — see
 `win2022-server-x64-appxfix-template` until `ludus templates list` on the target
 server shows it as built/available. If you repoint first, deploys fail at VM
 creation.
+
 ```bash
 ludus templates add -d templates/win2022-server-x64-appxfix
 ludus templates build -n win2022-server-x64-appxfix-template
@@ -52,17 +48,18 @@ ludus templates logs -t 50
 ludus templates status
 ludus templates list
 ```
+
 In the build log, look for the `=== remove-appx-sysprep-blockers ===`
 transcript sections: the first lists the EdgeUpdate service disable and policy
 key, the second lists any packages found and removed, and **fails the build** if
 any blocker remains installed-but-not-provisioned.
-A full range deploy from the rebuilt template where the sysprep **rescue tasks
-are skipped** — `Remove AppX packages reported by the failed Sysprep attempt`
-and `Retry Sysprep ...` never run — not merely a deploy that succeeds after
-retries (that was the pre-
+The image is correct when a full range deploy from it **skips the sysprep rescue
+tasks** — `Remove AppX packages reported by the failed Sysprep attempt` and
+`Retry Sysprep ...` never run — rather than merely succeeding after retries. The
 2-OSD Ceph I/O constraint (ERR-22) is independent of the AppX blocker.
 After any `ludus-server --update`, diff this directory against the refreshed
 stock tree and fold in upstream changes:
+
 ```bash
 diff -r packer/win2022-server-x64 templates/win2022-server-x64-appxfix \
   --exclude README.md --exclude iso --exclude scripts --exclude ansible
@@ -70,5 +67,6 @@ diff packer/common templates/win2022-server-x64-appxfix/iso
 diff packer/scripts templates/win2022-server-x64-appxfix/scripts
 diff packer/ansible/ngen.yml templates/win2022-server-x64-appxfix/ansible/ngen.yml
 ```
+
 This is a drift check, not a re-apply: an upgrade cannot delete or revert this
 directory, it can only make it stale.

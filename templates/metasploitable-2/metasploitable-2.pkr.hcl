@@ -56,10 +56,11 @@ variable "ssh_username" {
   default = "msfadmin"
 }
 # The provisioning play comes from the get_sybers.templates collection shipped under
-# ansible/collections/ in this source. Install it together with the template
-# (`ludus source add ... --source-collections get_sybers.templates`); Ludus exports the
-# user's installed collections to template builds via ANSIBLE_COLLECTIONS_PATH, which
-# import.sh inherits. Never override that variable here.
+# ansible/collections/ in this repository. The shell-local provisioner installs it at
+# build time from requirements.yml (a git pin) with ANSIBLE_HOME under ansible_home; it
+# lands in the first entry of the ANSIBLE_COLLECTIONS_PATH Ludus exports (the user's
+# collections), where import.sh's ansible-playbook finds it. Never override that
+# variable here.
 # This block has to be in each file or packer won't be able to use the variables
 variable "proxmox_url" {
   type = string
@@ -148,6 +149,9 @@ build {
       "ANSIBLE_HOME=${var.ansible_home}",
       "ANSIBLE_PLAYBOOK=get_sybers.templates.provision",
     ]
-    inline = ["bash \"${path.root}/scripts/import.sh\""]
+    inline = [
+      "ansible-galaxy collection install -r \"${path.root}/requirements.yml\" --no-deps --force",
+      "bash \"${path.root}/scripts/import.sh\"",
+    ]
   }
 }

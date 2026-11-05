@@ -2,15 +2,18 @@
 # TUI/GUI picker. Packer requires a literal default, so this stays a static string.
 variable "description" {
   type    = string
-  default = "macOS Sequoia 15.4 for Ludus - OpenCore-booted on Proxmox. Two-phase Ansible build with a one-time interactive install; see README before building."
+  default = "macOS Sequoia 15.4 for Ludus - OpenCore-booted on Proxmox. Fully unattended Ansible build (Recovery-driven install over the Proxmox console API); see README."
 }
-# macOS has no unattended installer (no preseed/autounattend equivalent) and boots
-# only through OpenCore, so it cannot use Packer's proxmox-iso builder. Like the
-# metasploitable templates it uses a "null" source; the real work is an Ansible
-# role get_sybers.templates.macos_template (run by build.yml) that orchestrates Proxmox over its
-# REST API. READ README.md before building - the OS install is a one-time
-# interactive step, and the finished template is tuned for `ludus range deploy`
-# (localuser creds, virtio NIC, a QEMU guest agent, working /usr/bin/python3).
+# macOS has no answer-file installer (no preseed/autounattend equivalent) and
+# boots only through OpenCore, so it cannot use Packer's proxmox-iso builder.
+# Like the metasploitable templates it uses a "null" source; the real work is an
+# Ansible role get_sybers.templates.macos_template (run by build.yml) that
+# orchestrates Proxmox over its REST API and drives the macOS install from the
+# VM console (VNC over the API): Recovery -> erase -> startosinstall -> a
+# first-boot daemon that creates the user and enables SSH. One `ludus templates
+# build` produces the template with no console interaction; it is tuned for
+# `ludus range deploy` (localuser creds, virtio NIC, a QEMU guest agent, working
+# /usr/bin/python3). See README.md.
 variable "source_url" {
   type        = string
   default     = "https://cdn.klabsdev.com/MacImages/macOS-Sequoia-15.4.iso"
@@ -18,7 +21,7 @@ variable "source_url" {
 }
 variable "source_checksum" {
   type        = string
-  default     = ""
+  default     = "sha256:82673cb431cda99bed3f159877a41e0e075d63baf2b10e5553eaed708a72da95"
   description = "REQUIRED: \"<algo>:<hex>\" digest of the macOS ISO. The build refuses to run without it, and Proxmox verifies the download against it (rule 9). klabsdev publishes no digest, so record the sha256 of the copy you fetch: `sha256sum <file>` (or `shasum -a 256 <file>` on macOS)."
 }
 variable "source_iso_name" {
@@ -109,8 +112,23 @@ variable "qemu_args" {
   type    = string
   default = ""
 }
-# First-user credentials created interactively in Setup Assistant, then used by
-# FINALIZE to SSH in and provision. Ludus's macOS deploy hard-codes these, so keep
+# Storage the install runs on. Empty = the Ludus template pool, unless that pool is
+# networked (Ceph RBD, NFS...): the installer's final APFS seal is a stream of small
+# synchronous writes that crawls for hours there, so the role then picks the local
+# storage with the most free space and FINALIZE moves the finished disk to the pool.
+variable "build_storage_pool" {
+  type    = string
+  default = ""
+}
+# Upper bound in seconds for the console-driven install (copy phase, the ~30 min
+# installer phase and the first boot). Generous: a slow host is not a failure.
+variable "install_timeout" {
+  type    = string
+  default = "14400"
+}
+# First-user credentials. The role's first-boot daemon creates this admin user in
+# the installed guest (printable ASCII only - they are typed through the console)
+# and FINALIZE SSHes in with them. Ludus's macOS deploy hard-codes these, so keep
 # them unless you also change Ludus's group_vars. Intentionally weak - isolated range.
 variable "ssh_username" {
   type    = string
@@ -123,12 +141,6 @@ variable "ssh_password" {
 # No `variable "os"` on purpose: Proxmox has no macOS guest type, and Ludus classifies a
 # template without that variable from its name - "macos" in vm_name is the only way to get
 # the macOS category (ludus-api/api_template_management.go, osFromTemplateName).
-#
-# The build runs the get_sybers.templates collection shipped under ansible/collections/ in
-# this source. Install it together with the template
-# (`ludus source add ... --source-collections get_sybers.templates`); Ludus exports the
-# user's installed collections to template builds via ANSIBLE_COLLECTIONS_PATH, which the
-# shell-local provisioner inherits. Never override that variable here.
 # This block has to be in each file or packer won't be able to use the variables
 variable "proxmox_url" {
   type = string
@@ -225,6 +237,8 @@ build {
       "GUEST_AGENT_CHECKSUM=${var.guest_agent_checksum}",
       "INSTALL_CLT=${var.install_clt}",
       "EMBED_OPENCORE=${var.embed_opencore}",
+      "BUILD_STORAGE_POOL=${var.build_storage_pool}",
+      "INSTALL_TIMEOUT=${var.install_timeout}",
       "SSH_USERNAME=${var.ssh_username}",
       "SSH_PASSWORD=${var.ssh_password}",
       "TASK_TIMEOUT=7200",
@@ -241,9 +255,15 @@ build {
       "ANSIBLE_PIPELINING=True",
       "ANSIBLE_SSH_ARGS=-o ControlMaster=auto -o ControlPersist=60s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
     ]
-    # macOS can't use proxmox-iso; packer's null source runs the collection's build.yml
-    # play by FQCN, which orchestrates Proxmox over its REST API. The collection comes
-    # from the ANSIBLE_COLLECTIONS_PATH the Ludus server exports to the build.
-    inline = ["ansible-playbook get_sybers.templates.build"]
+    # macOS can't use proxmox-iso; packer's null source installs the shared
+    # get_sybers.templates collection (requirements.yml, a git pin) and runs its
+    # build.yml play by FQCN, which orchestrates Proxmox over its REST API. The
+    # install runs with ANSIBLE_HOME under ansible_home and lands in the first
+    # entry of the ANSIBLE_COLLECTIONS_PATH Ludus exports (the user's collections),
+    # where ansible-playbook finds it without overriding that variable.
+    inline = [
+      "ansible-galaxy collection install -r \"${path.root}/requirements.yml\" --no-deps --force",
+      "ansible-playbook get_sybers.templates.build",
+    ]
   }
 }

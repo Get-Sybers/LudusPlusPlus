@@ -208,8 +208,9 @@ ssh_common_args="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 if [[ "${SSH_LEGACY_CRYPTO:-true}" == "true" ]]; then
   ssh_common_args="${ssh_common_args} -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedKeyTypes=+ssh-rsa -o KexAlgorithms=+diffie-hellman-group1-sha1 -o Ciphers=+aes128-cbc"
 fi
-# The get_sybers.templates collection is installed by `ludus source add` and reaches this
-# build through the ANSIBLE_COLLECTIONS_PATH the Ludus server exports (inherited here).
+# The get_sybers.templates collection was installed by the Packer shell-local provisioner
+# (requirements.yml) into the user's collections, the first entry of the
+# ANSIBLE_COLLECTIONS_PATH the Ludus server exports (inherited here).
 ANSIBLE_HOME="${ANSIBLE_HOME}" \
 ANSIBLE_LOCAL_TEMP="${ANSIBLE_HOME}/tmp" \
 ANSIBLE_PERSISTENT_CONTROL_PATH_DIR="${ANSIBLE_HOME}/pc" \

@@ -2,14 +2,14 @@
 - name: "Validate required Proxmox connection and template inputs are set"
   ansible.builtin.assert:
     that:
-      - macos_api_host | length > 0
-      - macos_api_user | length > 0
-      - (macos_api_token_secret | default('') | length > 0) or (macos_api_password | default('') | length > 0)
-      - macos_node | length > 0
-      - macos_vm_name | length > 0
-      - macos_storage_pool | length > 0
-      - macos_iso_storage | length > 0
-      - macos_bridge | length > 0
+      - macos_template_api_host | length > 0
+      - macos_template_api_user | length > 0
+      - (macos_template_api_token_secret | default('') | length > 0) or (macos_template_api_password | default('') | length > 0)
+      - macos_template_node | length > 0
+      - macos_template_vm_name | length > 0
+      - macos_template_storage_pool | length > 0
+      - macos_template_iso_storage | length > 0
+      - macos_template_bridge | length > 0
     fail_msg: "Missing required Proxmox/template variables - check the .pkr.hcl and build.yml env mapping."
     quiet: true
 - name: "Validate both ISO checksums are pinned as 'algo:hex' (refuse unverified media)"
@@ -20,62 +20,65 @@
       - item.split(':')[0] in ['sha256', 'sha512', 'sha384', 'sha224', 'sha1', 'md5']
       - item.split(':')[1:] | join(':') | length > 0
     fail_msg: >-
-      {{ macos_vm_name }}: an ISO checksum is unset or malformed. Pin
+      {{ macos_template_vm_name }}: an ISO checksum is unset or malformed. Pin
       source_checksum (macOS ISO) and opencore_checksum in the .pkr.hcl as
       'sha256:<hex>' - the build refuses to run without them and Proxmox verifies
       each download against them (rule 9).
     quiet: true
   loop:
-    - "{{ macos_iso_checksum }}"
-    - "{{ macos_opencore_checksum }}"
+    - "{{ macos_template_iso_checksum }}"
+    - "{{ macos_template_opencore_checksum }}"
 - name: "Build the Proxmox API auth header (token preferred, ticket fallback)"
-  when: macos_api_token_secret | default('') | length > 0
+  when: macos_template_api_token_secret | default('') | length > 0
   ansible.builtin.set_fact:
-    macos_auth_headers:
-      Authorization: "PVEAPIToken={{ macos_api_user }}={{ macos_api_token_secret }}"
+    macos_template_auth_headers:
+      Authorization: "PVEAPIToken={{ macos_template_api_user }}={{ macos_template_api_token_secret }}"
   no_log: true
 - name: "Obtain a ticket when no API token is available"
-  when: macos_api_token_secret | default('') | length == 0
+  when: macos_template_api_token_secret | default('') | length == 0
   block:
     - name: "Request a Proxmox access ticket"
       ansible.builtin.uri:
-        url: "{{ macos_api_host }}/api2/json/access/ticket"
+        url: "{{ macos_template_api_host }}/api2/json/access/ticket"
         method: POST
         body_format: form-urlencoded
         body:
-          username: "{{ macos_api_user }}"
-          password: "{{ macos_api_password }}"
-        validate_certs: "{{ macos_validate_certs }}"
-      register: macos_ticket
+          username: "{{ macos_template_api_user }}"
+          password: "{{ macos_template_api_password }}"
+        validate_certs: "{{ macos_template_validate_certs }}"
+      register: macos_template_ticket
       no_log: true
     - name: "Build cookie/CSRF auth headers from the ticket"
       ansible.builtin.set_fact:
-        macos_auth_headers:
-          Cookie: "PVEAuthCookie={{ macos_ticket.json.data.ticket }}"
-          CSRFPreventionToken: "{{ macos_ticket.json.data.CSRFPreventionToken }}"
+        macos_template_auth_headers:
+          Cookie: "PVEAuthCookie={{ macos_template_ticket.json.data.ticket }}"
+          CSRFPreventionToken: "{{ macos_template_ticket.json.data.CSRFPreventionToken }}"
       no_log: true
 - name: "Look up any existing VM/template with this name (cluster-wide)"
   no_log: true
   ansible.builtin.uri:
-    url: "{{ macos_api_host }}/api2/json/cluster/resources?type=vm"
+    url: "{{ macos_template_api_host }}/api2/json/cluster/resources?type=vm"
     method: GET
-    headers: "{{ macos_auth_headers }}"
-    validate_certs: "{{ macos_validate_certs }}"
-  register: macos_resources
+    headers: "{{ macos_template_auth_headers }}"
+    validate_certs: "{{ macos_template_validate_certs }}"
+  register: macos_template_resources
 - name: "Record the matching VM (if any)"
   ansible.builtin.set_fact:
-    macos_match: "{{ (macos_resources.json.data | selectattr('name', 'equalto', macos_vm_name) | list | first) | default({}) }}"
-- name: "PREPARE - no VM with this name exists yet"
-  when: macos_match.vmid is not defined
+    macos_template_match: "{{ (macos_template_resources.json.data | selectattr('name', 'equalto', macos_template_vm_name) | list | first) | default({}) }}"
+- name: "PREPARE - no VM with this name exists yet: create it and install macOS unattended"
+  when: macos_template_match.vmid is not defined
   ansible.builtin.include_tasks: prepare.yml
+- name: "FINALIZE - the install just completed in this run (first boot creates the user and opens SSH)"
+  when: macos_template_installed | default(false) | bool
+  ansible.builtin.include_tasks: finalize_discover.yml
 - name: "Nothing to do - a template with this name already exists"
   when:
-    - macos_match.vmid is defined
-    - (macos_match.template | default(0) | int) == 1
+    - macos_template_match.vmid is defined
+    - (macos_template_match.template | default(0) | int) == 1
   ansible.builtin.debug:
-    msg: "Template '{{ macos_vm_name }}' already exists (VM {{ macos_match.vmid }} on {{ macos_match.node }})."
+    msg: "Template '{{ macos_template_vm_name }}' already exists (VM {{ macos_template_match.vmid }} on {{ macos_template_match.node }})."
 - name: "FINALIZE - a VM exists but is not yet a template"
   when:
-    - macos_match.vmid is defined
-    - (macos_match.template | default(0) | int) != 1
+    - macos_template_match.vmid is defined
+    - (macos_template_match.template | default(0) | int) != 1
   ansible.builtin.include_tasks: finalize_discover.yml

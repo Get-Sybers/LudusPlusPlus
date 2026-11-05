@@ -1,7 +1,6 @@
 ---
-# Thin Packer entry point. The play (and its action, the windows_ngen role) ships once in
-# the get_sybers.templates collection under ansible/collections/ in this source. Install it
-# together with the template (`ludus source add ... --source-collections
-# get_sybers.templates`); the Ludus server exports the user's installed collections to
-# template builds via ANSIBLE_COLLECTIONS_PATH, so the FQCN below resolves at build time.
-- ansible.builtin.import_playbook: get_sybers.templates.ngen
+# Thin Packer entry point. The play (and its action, the windows_ngen role) ships
+# once in the get_sybers.templates collection; the Packer `shell-local` provisioner
+# installs it (../../requirements.yml) and the `ansible` one runs this wrapper.
+- name: Precompile the .NET native images (get_sybers.templates ngen play)
+  ansible.builtin.import_playbook: get_sybers.templates.ngen

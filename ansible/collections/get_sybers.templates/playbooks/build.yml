@@ -3,32 +3,43 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  # Scope the writable module work dir to this local play only. Under Ludus the
+  # build process's $HOME is the service user's home (/home/ludus, mode 700),
+  # which the build user cannot write, so the default remote_tmp (~/.ansible/tmp)
+  # fails. This must NOT be a global env var: the FINALIZE guest-SSH play below
+  # needs its own default so it writes under the guest's home, not this
+  # build-machine path.
+  vars:
+    ansible_remote_tmp: "{{ lookup('ansible.builtin.env', 'ANSIBLE_LOCAL_TEMP') | default('/tmp/.ansible-ludus-macos', true) }}"
   vars_files:
-    - vars/macos_vars.yml
+    - vars/macos_template_vars.yml
   roles:
     - get_sybers.templates.macos_template
 - name: "Provision the installed macOS guest (FINALIZE only)"
-  hosts: macos_target
+  hosts: macos_template_target
   gather_facts: false
   vars_files:
-    - vars/macos_vars.yml
+    - vars/macos_template_vars.yml
   tasks:
     - name: "Run the in-guest provisioning tasks unless skipped"
       ansible.builtin.import_role:
         name: get_sybers.templates.macos_template
         tasks_from: provision
-      when: not (macos_skip_provision | bool)
+      when: not (macos_template_skip_provision | bool)
 - name: "Convert the macOS VM to a Ludus template (FINALIZE only)"
   hosts: localhost
   connection: local
   gather_facts: false
+  # Local play - same writable remote_tmp as the orchestrate play above.
+  vars:
+    ansible_remote_tmp: "{{ lookup('ansible.builtin.env', 'ANSIBLE_LOCAL_TEMP') | default('/tmp/.ansible-ludus-macos', true) }}"
   vars_files:
-    - vars/macos_vars.yml
+    - vars/macos_template_vars.yml
   tasks:
     - name: "Convert to a template when FINALIZE is ready and provisioning succeeded"
       ansible.builtin.import_role:
         name: get_sybers.templates.macos_template
         tasks_from: finalize_convert
       when:
-        - macos_finalize_ready | default(false) | bool
-        - (macos_provision_ok | default(false) | bool) or (macos_skip_provision | bool)
+        - macos_template_finalize_ready | default(false) | bool
+        - (macos_template_provision_ok | default(false) | bool) or (macos_template_skip_provision | bool)

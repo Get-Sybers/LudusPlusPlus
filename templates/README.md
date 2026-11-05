@@ -19,67 +19,79 @@ run `ludus templates build -n <name>` afterwards. Built images are shared instan
 
 ## Available templates
 
-Names in the first column are what `ludus templates build -n` takes. "Needs" lists what the building user must
-have installed before the build; the Ludus server exports the user's installed roles and collections to every
-template build.
+Names in the first column are what `ludus templates build -n` takes. "Needs" lists what a build pulls in or
+expects: most templates install their own Ansible collections at build time from a pinned git source or Galaxy
+(the Ludus host needs access to github.com / galaxy.ansible.com), and the Ludus server exports the building
+user's installed roles and collections to every template build.
 
 ### Linux
 
 | Template | Needs | Description |
 | --- | --- | --- |
 | `ludusplusplus-debian-13-x64-server-template` | — | Debian 13 (Trixie) minimal x64 server, `debian:debian`. Adapted from the [Ludus Packer starter](https://github.com/badsectorlabs/ludus_packer_template). |
-| `ninjasploitable-x64-server-template` | — | Debian 12 target with vulnerable services, realmd/sssd AD-join packages and themed vulnerable web content baked in at build; `debian:debian`. |
+| `ninjasploitable-x64-server-template` | installs `community.general` + `ansible.mysql` from Galaxy at build time | Debian 12 target with vulnerable services, realmd/sssd AD-join packages, the themed vulnerable web content and an intentionally open MariaDB baked in at build; `debian:debian`. |
 
 ### Windows
 
 | Template | Needs | Description |
 | --- | --- | --- |
 | `win10-22h2-x64-enterprise-appxfix-template` | — | Windows 10 22H2 Enterprise with every AppX sysprep blocker removed at build, for workstation VMs that sysprep. |
-| `win11-22h2-x64-enterprise-appxfix-template` | `get_sybers.templates` | Windows 11 22H2 Enterprise with the same AppX sysprep fix. |
-| `win2022-server-x64-appxfix-template` | `get_sybers.templates` | Windows Server 2022 with the AppX sysprep blockers removed and EdgeUpdate disabled at build. Use instead of the stock `win2022-server-x64-template` for VMs that sysprep. |
-| `win2022-exchange2019-x64-template` | `get_sybers.templates` | Windows Server 2022 with the Exchange 2019 CU15 prerequisites and media baked in; derived from `win2022-server-x64-appxfix`. |
-| `GS-flare-template` | role `badsectorlabs.ludus_flarevm` | Windows 10 malware-analysis workstation with FLARE VM tooling (UEFI boot, Defender off). Named apart from the Bad Sector Labs `flare-vm-template` so both can coexist. |
+| `win11-22h2-x64-enterprise-appxfix-template` | installs `get_sybers.templates` (FGNW git pin) at build time | Windows 11 22H2 Enterprise with the same AppX sysprep fix. |
+| `win2022-server-x64-appxfix-template` | installs `get_sybers.templates` (FGNW git pin) at build time | Windows Server 2022 with the AppX sysprep blockers removed and EdgeUpdate disabled at build. Use instead of the stock `win2022-server-x64-template` for VMs that sysprep. |
+| `win2022-exchange2019-x64-template` | installs `get_sybers.templates` (FGNW git pin) at build time | Windows Server 2022 with the Exchange 2019 CU15 prerequisites and media baked in; derived from `win2022-server-x64-appxfix`. |
+| `GS-flare-template` | role `badsectorlabs.ludus_flarevm`, installed by the building user | Windows 10 malware-analysis workstation with FLARE VM tooling (UEFI boot, Defender off). Named apart from the Bad Sector Labs `flare-vm-template` so both can coexist. |
 
 ### Imported images (orchestrated builds)
 
 | Template | Needs | Description |
 | --- | --- | --- |
-| `metasploitable-2-x64-server-template` | `get_sybers.templates` | Metasploitable2 (Ubuntu 8.04), Rapid7's official disk image imported through the Proxmox API; `msfadmin:msfadmin`. |
-| `metasploitable-3-ub1404-x64-server-template` | `get_sybers.templates` | Metasploitable3 (Ubuntu 14.04), Rapid7's published Vagrant box imported through the Proxmox API; `vagrant:vagrant`. |
+| `metasploitable-2-x64-server-template` | installs `get_sybers.templates` (this repository's git pin) at build time | Metasploitable2 (Ubuntu 8.04), Rapid7's official disk image imported through the Proxmox API; `msfadmin:msfadmin`. |
+| `metasploitable-3-ub1404-x64-server-template` | installs `get_sybers.templates` (this repository's git pin) at build time | Metasploitable3 (Ubuntu 14.04), Rapid7's published Vagrant box imported through the Proxmox API; `vagrant:vagrant`. |
 
-### macOS (orchestrated, OpenCore-booted, one-time interactive install)
+### macOS (orchestrated, OpenCore-booted, unattended console-driven install)
 
 | Template | Needs | Description |
 | --- | --- | --- |
-| `macos-monterey-12-template` | `get_sybers.templates` | macOS Monterey 12.7.1 |
-| `macos-ventura-13-template` | `get_sybers.templates` | macOS Ventura 13.6.3 |
-| `macos-sonoma-14-template` | `get_sybers.templates` | macOS Sonoma 14.1.1 |
-| `macos-sequoia-15-template` | `get_sybers.templates` | macOS Sequoia 15.4 |
-| `macos-tahoe-26-template` | `get_sybers.templates` | macOS Tahoe 26.0 (beta media) |
+| `macos-sequoia-15-template` | installs `get_sybers.templates` (FGNW git pin) at build time; `7z` on the node; `import` content on the ISO storage; local build storage | macOS Sequoia 15.4 — the release the unattended build is verified on. |
+| `macos-monterey-12-template` | same | macOS Monterey 12.7.1 (ISO checksum pinned; unattended flow unverified on this release). |
+| `macos-ventura-13-template` | same | macOS Ventura 13.6.3 (pin the ISO checksum first; unverified on this release). |
+| `macos-sonoma-14-template` | same | macOS Sonoma 14.1.1 (pin the ISO checksum first; unverified on this release). |
+| `macos-tahoe-26-template` | same | macOS Tahoe 26.0 beta media (pin the ISO checksum first; unverified on this release). |
 
-All five build the same way: `ludus templates build` runs twice, PREPARE (download and verify both ISOs, create
-and boot the VM) then, after the one-time interactive install at the Proxmox console, FINALIZE (provision over
-SSH, embed OpenCore, convert to a template). `localuser:password`, as Ludus expects for macOS. Each directory's
-README has the step-by-step and the ISO checksum you must pin before `ludus source add`.
+All five run the same `macos_template` role: one `ludus templates build` takes the VM through PREPARE (download
+and verify both ISOs, stage the Recovery image, create and boot the VM), a console-driven install over the
+Proxmox API's VNC websocket (erase, `startosinstall`, a first-boot daemon that creates the user and enables SSH)
+and FINALIZE (provision over SSH, embed OpenCore, move the disk to the template pool, convert to a template).
+`localuser:password`, as Ludus expects for macOS. Each directory's README lists the host prerequisites and the
+ISO checksum to pin before `ludus source add`.
 
-Install a template together with what it needs, for example:
+Install and build, for example:
 
 ```bash
-ludus source add https://github.com/Get-Sybers/LudusPlusPlus \
-  --templates win2022-server-x64-appxfix-template,macos-sequoia-15-template \
-  --source-collections get_sybers.templates
+ludus source add https://github.com/Get-Sybers/LudusPlusPlus --templates win2022-server-x64-appxfix-template,macos-sequoia-15-template
 ludus templates build -n win2022-server-x64-appxfix-template
 ```
+
+The collection is also selectable at `ludus source add` time (`--source-collections get_sybers.templates`) for
+range-side use; the template builds do not depend on that selection.
 
 ## Two kinds of template
 
 1. **Installer-driven** (`proxmox-iso` builder + preseed / Autounattend): the stock Ludus pattern. Packer boots
    the installer ISO on the Ludus NAT bridge and provisions the result over SSH or WinRM.
 2. **Orchestrated** (`source "null"` with `communicator = "none"` and a `shell-local` provisioner): for guests
-   with no unattended installer. Packer only runs a local orchestration (an Ansible play from
-   `get_sybers.templates`, or `scripts/import.sh`) that drives Proxmox over its REST API with the same Ludus
-   variables and API token the Proxmox plugin would use, and ends in the same state: a converted template in the
-   `SHARED` pool. The linter holds these to the same variable rules (T020) instead of the builder-attribute rules.
+   with no answer-file installer. Packer only runs a local orchestration (an Ansible play from
+   `get_sybers.templates`, or `scripts/import.sh`) that drives Proxmox over its REST API — and, for macOS, the VM
+   console over the API's VNC websocket — with the same Ludus variables and API token the Proxmox plugin would
+   use, and ends in the same state: a converted template in the `SHARED` pool. The linter holds these to the same
+   variable rules (T020) instead of the builder-attribute rules.
+
+Templates that run Ansible content beyond what the Ludus server ships install it themselves at build time from a
+`requirements.yml` in the template directory (a `shell-local` provisioner running `ansible-galaxy collection
+install` with `ANSIBLE_HOME` under `ansible_home`, so it lands in the user's collections that Ludus exports to the
+build). The Packer ansible provisioner's `galaxy_file` is not used: the plugin runs `ansible-galaxy` with
+Packer's own environment and fails on a Ludus server's read-only home directory. Git sources are pinned to a
+commit; bump the pin when the collection changes.
 
 ## Authoring rules (enforced by CI)
 
@@ -103,10 +115,12 @@ The `source-structure` job runs `scripts/ludus_source_lint.py`, and the `packer`
    group_vars for that OS.
 5. Set `ANSIBLE_HOME=${var.ansible_home}` and `skip_version_check = true` on every ansible provisioner, never
    override `ANSIBLE_ROLES_PATH` / `ANSIBLE_COLLECTIONS_PATH`, and keep every referenced path (playbooks,
-   scripts, `http/`, `cd_files`) inside the template directory. A `requirements.yml` that reaches outside the
-   directory is rejected: Ludus installs each template directory on its own.
-6. Run only Ansible content that Ludus installs itself (`ludus-reference/ansible-requirements.yml`), that this
-   source ships under `ansible/`, or that the README tells the building user to install.
+   scripts, `http/`, `cd_files`) inside the template directory. A `requirements.yml` may only name Galaxy
+   collections or pinned git sources: one that reaches outside the directory is rejected, because Ludus installs
+   each template directory on its own.
+6. Run only Ansible content that Ludus installs itself (`ludus-reference/ansible-requirements.yml`), that the
+   template installs from its own `requirements.yml`, that this source ships under `ansible/`, or that the README
+   tells the building user to install.
 7. Provide a static `description` variable (shown in the catalog), a real icon or no `icon_path`, and, for
    Windows, an `Autounattend.xml`.
 

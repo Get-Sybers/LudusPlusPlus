@@ -1,8 +1,3 @@
-> **Prerequisite:** this template's build runs the `get_sybers.templates` collection
-> shipped under `ansible/collections/` in this source. Install both together:
-> `ludus source add https://github.com/Get-Sybers/LudusPlusPlus --templates win2022-exchange2019-x64-template --source-collections get_sybers.templates`.
-> The Ludus server exports the user's installed collections to template builds.
-
 Windows Server 2022 with the **Exchange 2019 CU15 prerequisites and media baked in
 at build time**, derived from
 [`win2022-server-x64-appxfix`](../win2022-server-x64-appxfix/) (which itself removes the
@@ -10,6 +5,7 @@ Edge AppX sysprep blocker). Built for the FGNW `*-owa` hosts so
 that a range deploy only has to run the **AD-bound** half of the Exchange install.
 Everything the deploy-time `aleemladha.ludus_exchange` role would otherwise download and
 install that does **not** need Active Directory, done once in the image:
+
 - The full Exchange 2019 **Windows feature set** (`Install-WindowsFeature …`: `Web-*`,
   `RSAT-Clustering*`, `RPC-over-HTTP-proxy`, `Windows-Identity-Foundation`, `RSAT-ADDS`,
   `ADLDS`, …) plus the IIS6-management-compat optional features.
@@ -37,8 +33,10 @@ provisioning** (via `win_get_url` inside the guest), not a Proxmox boot ISO — 
 in `iso-inventory.yml`'s model awkwardly (that registry is keyed by Proxmox volid + node).
 Its identity is instead pinned where it is consumed: `checksum: "sha256:07c3fc16…629ae"`
 on the bake play's download, verified before use. sha256 recorded here + in the play.
+
 ```bash
 ludus templates add -d templates/win2022-exchange2019-x64
 ludus templates build -n win2022-exchange2019-x64-template
 ```
+
 `localuser` / `password`. The ~6 GB CU15 download makes this a long build; run it once.

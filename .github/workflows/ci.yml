@@ -9,11 +9,12 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: read
+# Least privilege: nothing at the workflow level, read-only checkouts per job, and no
+# persisted git credentials in the checkout.
+permissions: {}
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -22,15 +23,18 @@ env:
 jobs:
   source-structure:
     name: Ludus source structure, templates and blueprints
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout (with submodules, as `ludus source add` clones)
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -45,14 +49,26 @@ jobs:
       - name: Linter self-tests
         run: python -m pytest -q tests
 
+      - name: ludus-reference/ matches the upstream commits it records
+        # Re-derive from the exact commits versions.json records as provenance (not
+        # main), so a hand-edited or stale reference fails here; upstream Ludus
+        # advancing is the weekly ludus-reference-drift job's signal, not a PR gate.
+        run: |
+          ludus_ref="$(python -c "import json; print(json.load(open('ludus-reference/versions.json'))['provenance']['ludus']['commit'])")"
+          bsl_ref="$(python -c "import json; print(json.load(open('ludus-reference/versions.json'))['provenance']['ludus_source_bsl']['commit'])")"
+          python scripts/update_ludus_reference.py --check --ref "$ludus_ref" --bsl-ref "$bsl_ref"
+
   packer:
     name: Packer fmt + validate with the Ludus plugin set
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout (with submodules)
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Install Packer and plugins at the versions the Ludus server pins
         env:
@@ -64,15 +80,18 @@ jobs:
 
   ansible-and-yaml:
     name: yamllint + ansible-lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout (with submodules)
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -92,13 +111,36 @@ jobs:
 
   shell-and-workflows:
     name: shellcheck + actionlint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: shellcheck
         run: shellcheck -S style scripts/*.sh
 
       - name: actionlint
         run: docker run --rm -v "${{ github.workspace }}:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
+
+  all-green:
+    # The single status check to require on main: green only when every job above is.
+    name: all-green
+    if: ${{ always() }}
+    needs: [source-structure, packer, ansible-and-yaml, shell-and-workflows]
+    runs-on: ubuntu-24.04
+    permissions: {}
+    timeout-minutes: 2
+    steps:
+      - name: Every job succeeded
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          if jq -e '[.[] | .result] | any(. == "failure" or . == "cancelled" or . == "skipped")' <<<"$RESULTS" >/dev/null; then
+            echo "::error::a required job failed, was cancelled or was skipped"
+            exit 1
+          fi

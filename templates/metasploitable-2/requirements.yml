@@ -1,0 +1,15 @@
+---
+# The provisioning play (get_sybers.templates.provision) and its role live in the
+# get_sybers.templates collection shipped under ansible/collections/ of this
+# repository; FGNW's copy of the collection no longer carries them. The build
+# installs the collection at build time (the .pkr.hcl shell-local provisioner runs
+# `ansible-galaxy collection install -r requirements.yml`), then scripts/import.sh
+# runs the play by FQCN.
+#
+# Installed from the git source rather than a relative `type: dir`: Ludus copies an
+# installed template directory outside the repo tree, so a relative path would not
+# resolve at build time. The version is a 40-hex commit SHA so a build is
+# reproducible; bump it to the merge commit of any change to the collection.
+collections:
+  - name: git+https://github.com/Get-Sybers/LudusPlusPlus.git#/ansible/collections/get_sybers.templates
+    version: ac0a4787d5b4bb6b0f86a00818427a305a9ed9a9
