@@ -126,9 +126,17 @@ def add_windows_template(root: Path, with_autounattend: bool = True) -> Path:
 # --- baseline -----------------------------------------------------------------
 
 
+ACCEPTED_WARNINGS = {
+    # flare-vm keeps the name the Bad Sector Labs source also uses; a deliberate choice, see templates/README.md
+    ("T003", "templates/flare-vm/flare-vm.pkr.hcl"),
+}
+
+
 def test_repository_source_is_clean(lint, source):
     findings, by_rule = lint(source)
-    assert not [f for f in findings if f.level in ("error", "warning")], [f.as_text() for f in findings]
+    assert not [f for f in findings if f.level == "error"], [f.as_text() for f in findings if f.level == "error"]
+    warnings = {(f.rule, f.path) for f in findings if f.level == "warning"}
+    assert warnings == ACCEPTED_WARNINGS, [f.as_text() for f in findings if f.level == "warning"]
 
 
 def test_rule_catalogue_levels_are_valid(lint_module):
@@ -215,8 +223,8 @@ def test_bsl_template_name_collision_is_a_warning(lint, source):
 def test_vm_name_resolves_through_locals_like_ludus(lint, source):
     edit(source / TEMPLATE, 'locals {\n  template_description', 'locals {\n  name_prefix = "${var.vm_name}"\n  template_description')
     edit(source / TEMPLATE, 'vm_name                  = "${var.vm_name}"', 'vm_name                  = "${local.name_prefix}"')
-    _, by_rule = lint(source)
-    assert "T003" not in by_rule
+    findings, _ = lint(source)
+    assert not [f for f in findings if f.rule == "T003" and str(TEMPLATE) in f.path]
 
 
 def test_missing_ansible_home_is_an_error(lint, source):

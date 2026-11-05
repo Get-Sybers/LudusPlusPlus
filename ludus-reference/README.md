@@ -12,6 +12,7 @@ provenance; `versions.json` holds the upstream commits everything was generated 
 | `credentials.json` | Credentials Ludus uses per guest OS when deploying ranges | `ludus-server/ansible/range-management/group_vars/*.yml` |
 | `templates.json` | Template names that already exist on every Ludus server (builtins + auto-registered Bad Sector Labs source) | `ludus-server/packer/*`, `ludus-source-bsl/templates/*` |
 | `range-config.jsonschema` | The range config schema Ludus validates blueprints against (verbatim copy) | `ludus-server/ansible/user-files/range-config.jsonschema` |
+| `ansible-requirements.yml` | The Ansible collections and roles installed on every Ludus server (verbatim copy); what template playbooks may use without installing anything | `ludus-server/ansible/requirements.yml` |
 
 ## Refreshing
 

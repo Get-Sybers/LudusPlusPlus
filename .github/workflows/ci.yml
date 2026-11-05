@@ -84,6 +84,9 @@ jobs:
       - name: yamllint
         run: yamllint --format github .
 
+      - name: Install the collections the Ludus server ships and this source's collections
+        run: scripts/install_ansible_deps.sh
+
       - name: ansible-lint
         run: ansible-lint --offline
 

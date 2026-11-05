@@ -1,0 +1,30 @@
+---
+namespace: get_sybers
+name: templates
+version: 0.1.0
+readme: README.md
+authors:
+  - get-sybers <99623331+Get-Sybers@users.noreply.github.com>
+description: >-
+  Shared Packer template-baking content for the Get-Sybers Ludus sources: the
+  OpenCore-driven macOS template role (orchestrates Proxmox over its REST API in
+  PREPARE/FINALIZE phases, with a bundled stdlib-only proxmox_iso_download
+  module), the Windows .NET native-image (ngen) role, and the imported-image
+  provisioning role shared by the Metasploitable targets. Installed by
+  `ludus source add --source-collections get_sybers.templates` and reached by the
+  template builds through the ANSIBLE_COLLECTIONS_PATH the Ludus server exports.
+license:
+  - AGPL-3.0-only
+tags:
+  - infrastructure
+  - ludus
+  - proxmox
+  - packer
+  - templates
+repository: https://github.com/Get-Sybers/LudusPlusPlus
+dependencies:
+  community.windows: ">=2.4.0,<3.0.0"
+build_ignore:
+  - tests/output
+  - tox-ansible.ini
+  - changelogs/.plugin-cache.yaml

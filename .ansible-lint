@@ -22,6 +22,15 @@ kinds:
   - playbook: "templates/*/ansible/*.yml"
   - playbook: "templates/*/ansible/*.yaml"
 
+# Roles a template build expects the building user to have installed on the Ludus
+# server (documented in that template's README); mocked so syntax-check can resolve them.
+mock_roles:
+  - badsectorlabs.ludus_flarevm
+
 # Template-build playbooks run against a bare installer image over password SSH;
-# they legitimately use `hosts: all` with become. Nothing is skipped by default.
-skip_list: []
+# they legitimately use `hosts: all` with become.
+skip_list:
+  # The vendored get_sybers.templates collection prefixes the macos_template role's
+  # variables with `macos_` rather than `macos_template_`; renaming them is a change to
+  # a role that drives real Proxmox hosts, not a lint fix.
+  - var-naming[no-role-prefix]
