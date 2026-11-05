@@ -8,7 +8,7 @@ Roles and collections shipped by this source. Both are installed per user by `lu
 
 | Collection | Purpose |
 |---|---|
-| [`get_sybers.templates`](./collections/get_sybers.templates/) | Template-build content run by the Windows (`ngen`), macOS (OpenCore orchestration) and Metasploitable (imported-image provisioning) templates. Install it with those templates: `ludus source add ... --source-collections get_sybers.templates`. |
+| [`get_sybers.templates`](./collections/get_sybers.templates/) | Template-build content run by the Windows (`ngen`), macOS (unattended OpenCore build) and Metasploitable (imported-image provisioning) templates. Maintained in [Get-Sybers/FGNW](https://github.com/Get-Sybers/FGNW) (this copy adds the Metasploitable role); the templates install it at build time from pinned git sources, and it is also selectable with `--source-collections get_sybers.templates`. |
 
 Add a role with `git submodule add <repo> ansible/roles/<name>` or by committing the role directory directly,
 then reference it from a blueprint's `range-config.yml` or a template's build playbook.

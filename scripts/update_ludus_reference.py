@@ -307,9 +307,15 @@ def generate(out: Path, ludus_ref: str, bsl_ref: str) -> None:
         }
         for name, data in files.items():
             (out / name).write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        shutil.copyfile(ludus / "ludus-server" / "ansible" / "user-files" / "range-config.jsonschema", out / "range-config.jsonschema")
+        schema_path = out / "range-config.jsonschema"
+        shutil.copyfile(ludus / "ludus-server" / "ansible" / "user-files" / "range-config.jsonschema", schema_path)
+        schema = schema_path.read_text(encoding="utf-8")
+        json.loads(schema)  # must be valid JSON
+        # Normalise whitespace (no trailing spaces, exactly one final newline) so the
+        # committed copy satisfies .editorconfig and round-trips through --check;
+        # upstream ships it with trailing whitespace and no final newline.
+        schema_path.write_text("\n".join(line.rstrip() for line in schema.split("\n")).rstrip("\n") + "\n", encoding="utf-8")
         shutil.copyfile(ludus / "ludus-server" / "ansible" / "requirements.yml", out / "ansible-requirements.yml")
-        json.loads((out / "range-config.jsonschema").read_text(encoding="utf-8"))  # must be valid JSON
 
 
 def normalise(name: str, text: str) -> str:

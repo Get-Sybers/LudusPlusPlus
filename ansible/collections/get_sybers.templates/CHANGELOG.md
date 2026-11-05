@@ -16,7 +16,7 @@ until the interface is stable).
   `requirements.yml` + `ansible-galaxy`, by FQCN:
   - `macos_template` role (was copied verbatim into all five `macos-*`
     templates) plus its bundled stdlib-only `proxmox_iso_download` module
-    (`plugins/modules/`), and the `build.yml` / `macos_vars.yml` build playbook
+    (`plugins/modules/`), and the `build.yml` / `macos_template_vars.yml` build playbook
     (`playbooks/`).
   - `windows_ngen` role (was `ansible/ngen.yml`, copied into three Windows
     templates) — .NET native-image generation.

@@ -4,9 +4,8 @@ Shared Packer template-baking content for the Get-Sybers Ludus sources. It exist
 to remove the per-template duplication that used to live under `templates/`: the
 same role, module, and build playbooks were copied verbatim into every template
 directory. They now live here once and are consumed by each template's `.pkr.hcl`
-build by FQCN: `ludus source add --source-collections get_sybers.templates` installs
-the collection for the building user, and the Ludus server exports the user's
-installed collections to every template build (`ANSIBLE_COLLECTIONS_PATH`).
+build through the native Ansible mechanism — `requirements.yml` +
+`ansible-galaxy collection install`, referenced by FQCN.
 
 > Design rule (ansible-standards §2): **the role acts, the playbook decides.** The
 > roles below carry the actions; each template keeps only a thin build entry point
@@ -16,47 +15,44 @@ installed collections to every template build (`ANSIBLE_COLLECTIONS_PATH`).
 ## Contents
 
 | Kind | Reference | Was |
-|---|---|---|
+| --- | --- | --- |
 | role | `get_sybers.templates.macos_template` | `templates/macos-*/roles/macos_template/` (×5, identical) |
 | module | `get_sybers.templates.proxmox_iso_download` | `.../macos_template/library/proxmox_iso_download.py` (×5) |
-| role | `get_sybers.templates.windows_ngen` | `templates/win*/ansible/ngen.yml` (×3, identical) |
-| role | `get_sybers.templates.metasploitable_provision` | `templates/metasploitable-*/ansible/provision.yml` (×2, identical) |
-| playbook | `playbooks/build.yml` | `templates/macos-*/build.yml` (×5) + `macos_vars.yml` (×5) |
+| role | `get_sybers.templates.windows_ngen` | `templates/win*/ansible/ngen.yml` (×2, identical) |
+| playbook | `playbooks/build.yml` | `templates/macos-*/build.yml` (×5) + `macos_template_vars.yml` (×5) |
 | playbook | `playbooks/ngen.yml` | thin play around `windows_ngen` |
+| role | `get_sybers.templates.metasploitable_provision` | `templates/metasploitable-*/ansible/provision.yml` (×2, identical); kept in this copy because LudusPlusPlus still ships the Metasploitable 2/3 templates |
 | playbook | `playbooks/provision.yml` | thin play around `metasploitable_provision` |
 
-The three roles and the module are referenced by FQCN; the playbooks are invoked
+This copy is the FGNW collection (its maintained home) plus the Metasploitable
+provisioning role. The roles and the module are referenced by FQCN; the playbooks are invoked
 by their collection-qualified name (the collection name followed by the playbook
 stem). Each consuming template's build definition holds the exact command.
 
 ## How templates consume it
 
-Install the collection with the templates that need it and the builds find it
-through the collections path the Ludus server exports:
-
-```bash
-ludus source add https://github.com/Get-Sybers/LudusPlusPlus \
-  --templates macos-sequoia-15-template,win2022-server-x64-appxfix-template \
-  --source-collections get_sybers.templates
-```
+Each consuming template ships a `requirements.yml` pinning this collection and
+installs it at build time, then refers to its content by FQCN:
 
 - **macOS** (`templates/macos-*`): the `.pkr.hcl` `shell-local` provisioner runs
-  the collection's `build.yml` play by FQCN. The build env-bridge lives in
-  `playbooks/vars/macos_vars.yml`.
-- **Windows** (`templates/win*`): the Packer `ansible` provisioner runs the two-line
-  `ansible/ngen.yml`, which `import_playbook`s the collection's `ngen.yml` play.
-- **Metasploitable** (`templates/metasploitable-*`): `scripts/import.sh` invokes
-  the collection's `provision.yml` play.
-
-A template directory must never carry a `requirements.yml` that points outside
-itself: Ludus installs each template directory on its own, so relative paths to
-`ansible/collections/` do not exist at build time.
+  `ansible-galaxy collection install -r requirements.yml` then invokes the
+  collection's `build.yml` play. The build env-bridge lives in
+  `playbooks/vars/macos_template_vars.yml`.
+- **Metasploitable** (`templates/metasploitable-*`): the `.pkr.hcl` `shell-local`
+  provisioner installs the collection from this repository's git pin, then
+  `scripts/import.sh` invokes the collection's `provision.yml` play.
+- **Windows** (`templates/win*`): a Packer `shell-local` provisioner runs
+  `ansible-galaxy collection install -r requirements.yml` under `ansible_home`
+  (not the `ansible` provisioner's `galaxy_file`, which ignores `ansible_env_vars`
+  and dies on a Ludus server's read-only `$HOME`), then the `ansible` provisioner
+  runs the two-line `ansible/ngen.yml`, which `import_playbook`s the collection's
+  `ngen.yml` play.
 
 ## Requirements
 
 - `ansible-core >= 2.15` (`meta/runtime.yml`).
-- `community.windows` (for `windows_ngen`), declared in `galaxy.yml`; the Ludus
-  server installs it (`ludus-server/ansible/requirements.yml`).
+- `community.windows` (for `windows_ngen`), declared in `galaxy.yml` and pinned in
+  the consuming template's `requirements.yml`.
 
 ## Testing
 

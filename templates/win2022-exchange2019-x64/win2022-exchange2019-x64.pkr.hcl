@@ -47,6 +47,13 @@ variable "proxmox_url" {
 variable "proxmox_host" {
   type = string
 }
+variable "proxmox_username" {
+  type = string
+}
+variable "proxmox_password" {
+  type      = string
+  sensitive = true
+}
 variable "proxmox_storage_pool" {
   type = string
 }
@@ -131,8 +138,10 @@ source "proxmox-iso" "win2022-exchange2019-x64" {
   }
   node                 = "${var.proxmox_host}"
   os                   = "${var.os}"
+  password             = "${var.proxmox_password}"
   proxmox_url          = "${var.proxmox_url}"
   template_description = "${local.template_description}"
+  username             = "${var.proxmox_username}"
   vm_name              = "${var.vm_name}"
   winrm_insecure       = true
   winrm_password       = "${var.winrm_password}"
@@ -154,6 +163,21 @@ build {
   }
   provisioner "powershell" {
     scripts = ["scripts/optimize-assemblies.ps1"]
+  }
+  # The collections ansible/ngen.yml and ansible/exchange-bake.yml need
+  # (requirements.yml) are installed here, not via the ansible provisioner's
+  # `galaxy_file`: the plugin runs ansible-galaxy with packer's own environment, not
+  # `ansible_env_vars`, so on a Ludus server (the service runs with
+  # ProtectHome=read-only) it dies creating ~/.ansible/tmp. Run with ANSIBLE_HOME
+  # under ansible_home instead, the collections land in the first entry of the
+  # ANSIBLE_COLLECTIONS_PATH Ludus exports (the user's collections), where the
+  # ansible provisioners find them without an override.
+  provisioner "shell-local" {
+    environment_vars = [
+      "ANSIBLE_HOME=${var.ansible_home}",
+      "ANSIBLE_LOCAL_TEMP=${var.ansible_home}/tmp",
+    ]
+    inline = ["ansible-galaxy collection install -r \"${path.root}/requirements.yml\""]
   }
   provisioner "ansible" {
     playbook_file = "ansible/ngen.yml"

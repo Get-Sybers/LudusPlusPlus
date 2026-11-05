@@ -4,6 +4,7 @@ already serves the themed attack surface before any deploy step. Derived from th
 [`ludus-source-bsl`](https://github.com/badsectorlabs/ludus-source-community) Debian
 template (proxmox-iso + preseed), retargeted to Debian 12.1.0.
 Both apt sets that get blocked once the range is contained:
+
 - **Vulnerable-service packages** (`get_sybers.range_ninjasploitable_server`): `apache2`,
   `apache2-utils`, `php`+modules, `libapache2-mod-php`, `mariadb-server`/`-client`,
   `python3-pymysql`, `vsftpd`, `openssh-server`, `samba`, `postgresql`.
@@ -31,8 +32,10 @@ Boots the Debian 12.1.0 netinst ISO with `iso_url` + `iso_checksum` and
 `iso_file`). The preseed is vendored in `http/`, so **no base template or extra
 `source add` is required** — `ludus templates add -d templates/ninjasploitable`
 builds it standalone.
+
 ```bash
 ludus templates add -d templates/ninjasploitable
 ludus templates build -n ninjasploitable-x64-server-template
 ```
+
 `debian` / `debian`.

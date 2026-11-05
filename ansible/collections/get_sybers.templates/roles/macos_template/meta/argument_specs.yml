@@ -5,62 +5,65 @@ argument_specs:
     description:
       - >-
         Orchestrates Proxmox over its REST API to build an OpenCore-booted macOS
-        template in two phases (PREPARE then FINALIZE) around a one-time
-        interactive macOS install. Entry point is C(tasks/main.yml); the
+        template fully unattended: PREPARE creates the VM, boots macOS Recovery
+        from a disk image extracted out of the installer ISO and drives the
+        install from the VM console (VNC over the API); a first-boot daemon then
+        creates the admin user and enables SSH so FINALIZE can provision the
+        guest and convert it. Entry point is C(tasks/main.yml); the
         C(provision) and C(finalize_convert) task files are driven by the
-        collection's C(build.yml) play on the respective phase.
+        collection's C(build.yml) play.
       - >-
         Connection and template-identity inputs have no safe default and are
-        supplied by the play (see C(playbooks/vars/macos_vars.yml), which maps
+        supplied by the play (see C(playbooks/vars/macos_template_vars.yml), which maps
         them from the Packer build environment).
     options:
-      macos_api_host:
+      macos_template_api_host:
         description: Proxmox API base URL, e.g. V(https://pve.example:8006).
         type: str
         required: true
-      macos_api_user:
+      macos_template_api_user:
         description:
           - For token auth, the token id C(user@realm!tokenid).
           - For ticket auth, the login C(user@realm).
         type: str
         required: true
-      macos_api_token_secret:
+      macos_template_api_token_secret:
         description: API token secret; when set, token auth is used.
         type: str
         default: ""
-      macos_api_password:
-        description: Password for ticket auth, used only when O(macos_api_token_secret) is unset.
+      macos_template_api_password:
+        description: Password for ticket auth, used only when O(macos_template_api_token_secret) is unset.
         type: str
         default: ""
-      macos_validate_certs:
+      macos_template_validate_certs:
         description: Whether to verify the Proxmox TLS certificate.
         type: bool
         default: false
-      macos_node:
+      macos_template_node:
         description: Proxmox node name to build the VM on.
         type: str
         required: true
-      macos_storage_pool:
+      macos_template_storage_pool:
         description: Storage identifier for the VM disk and EFI disk.
         type: str
         required: true
-      macos_storage_format:
+      macos_template_storage_format:
         description: Disk image format for the SATA system disk (e.g. V(raw), V(qcow2)).
         type: str
         default: ""
-      macos_pool:
+      macos_template_pool:
         description: Optional Proxmox resource pool to place the VM in.
         type: str
         default: ""
-      macos_iso_storage:
+      macos_template_iso_storage:
         description: Storage identifier that allows C(iso) content, for the macOS and OpenCore ISOs.
         type: str
         required: true
-      macos_bridge:
+      macos_template_bridge:
         description: Proxmox network bridge for the VM NIC (the Ludus NAT interface).
         type: str
         required: true
-      macos_vm_name:
+      macos_template_vm_name:
         description: Name of the VM and resulting template (the registered template name).
         type: str
         required: true
@@ -68,117 +71,164 @@ argument_specs:
         description: Free-text description recorded on the VM/template.
         type: str
         default: ""
-      macos_iso_url:
+      macos_template_iso_url:
         description: Source URL the Proxmox node downloads the macOS installer ISO from.
         type: str
         required: true
-      macos_iso_checksum:
+      macos_template_iso_checksum:
         description: "Pinned checksum of the macOS ISO as C(algo:hex) (the build refuses unverified media)."
         type: str
         required: true
-      macos_iso_name:
+      macos_template_iso_name:
         description: Filename to store the macOS installer ISO under.
         type: str
         required: true
-      macos_opencore_url:
+      macos_template_opencore_url:
         description: Source URL the Proxmox node downloads the OpenCore boot ISO from.
         type: str
         required: true
-      macos_opencore_checksum:
+      macos_template_opencore_checksum:
         description: "Pinned checksum of the OpenCore ISO as C(algo:hex)."
         type: str
         required: true
-      macos_opencore_name:
+      macos_template_opencore_name:
         description: Filename to store the OpenCore ISO under.
         type: str
         required: true
-      macos_guest_cpu:
+      macos_template_guest_cpu:
         description: Proxmox CPU model for the guest.
         type: str
         default: Skylake-Client-v4
-      macos_guest_nic_model:
+      macos_template_guest_nic_model:
         description: Virtual NIC model.
         type: str
         default: virtio
-      macos_vga:
+      macos_template_vga:
         description: VGA adapter type.
         type: str
         default: vmware
-      macos_machine:
+      macos_template_machine:
         description: QEMU machine type.
         type: str
         default: q35
-      macos_bios:
+      macos_template_bios:
         description: Firmware type (OVMF/UEFI is required for OpenCore).
         type: str
         default: ovmf
-      macos_efitype:
+      macos_template_efitype:
         description: EFI disk type.
         type: str
         default: 4m
-      macos_qemu_args:
+      macos_template_qemu_args:
         description: >-
           Override for the raw QEMU C(args) line. Empty means auto: empty on
           Intel hosts, a C(-cpu ...,vendor=GenuineIntel) line on AMD hosts.
         type: str
         default: ""
-      macos_vm_memory:
+      macos_template_vm_memory:
         description: VM memory in MiB.
         type: int
         default: 8192
-      macos_vm_cores:
+      macos_template_vm_cores:
         description: VM CPU cores.
         type: int
         default: 4
-      macos_vm_disk_size:
+      macos_template_vm_disk_size:
         description: System disk size in GiB.
         type: int
         default: 80
-      macos_balloon:
+      macos_template_balloon:
         description: Balloon memory floor in MiB (0 disables ballooning).
         type: int
         default: 0
-      macos_ssh_username:
-        description: In-guest user created during the interactive install, used for provisioning over SSH.
+      macos_template_ssh_username:
+        description: >-
+          Admin user the first-boot daemon creates in the installed guest (printable ASCII only;
+          it is typed through the console), used for provisioning over SSH and by Ludus deploy.
         type: str
         default: localuser
-      macos_ssh_password:
-        description: Password for O(macos_ssh_username).
+      macos_template_ssh_password:
+        description: Password for O(macos_template_ssh_username) (printable ASCII only).
         type: str
         default: password
-      macos_skip_provision:
+      macos_template_build_storage:
+        description: >-
+          Storage the install runs on. Empty picks the template pool, unless that pool is a
+          network storage (O(macos_template_network_storage_types)) - then the local storage
+          (O(macos_template_local_storage_types)) with the most free space, because the
+          installer's final APFS seal crawls for hours on networked storage. FINALIZE moves
+          the finished disk to the template pool when they differ.
+        type: str
+        default: ""
+      macos_template_network_storage_types:
+        description: Proxmox storage types treated as networked (triggers the local build storage).
+        type: list
+        elements: str
+        default: ["rbd", "nfs", "cifs", "iscsi", "iscsidirect", "glusterfs", "cephfs"]
+      macos_template_local_storage_types:
+        description: Proxmox storage types eligible as the local build storage.
+        type: list
+        elements: str
+        default: ["zfspool", "lvmthin", "lvm", "dir", "btrfs"]
+      macos_template_work_dir:
+        description: >-
+          Scratch directory on the build host for the extracted Recovery image and the
+          console driver's per-state screenshots (kept for post-mortem).
+        type: str
+        default: "{{ lookup('ansible.builtin.env', 'ANSIBLE_LOCAL_TEMP') | default('/tmp', true) }}/macos-template"
+      macos_template_basesystem_name:
+        description: Filename of the Recovery boot image staged as C(import) content in the ISO storage.
+        type: str
+        default: "{{ macos_template_vm_name }}-basesystem.raw"
+      macos_template_disk_cache_build:
+        description: Proxmox disk cache mode for the system disk while installing (C(unsafe) skips flushes).
+        type: str
+        default: unsafe
+      macos_template_disk_cache_final:
+        description: Disk cache mode written into the finished template.
+        type: str
+        default: writeback
+      macos_template_console_boot_timeout:
+        description: Seconds the console driver waits for macOS Recovery to appear after a boot.
+        type: int
+        default: 600
+      macos_template_install_timeout:
+        description: Seconds the console driver allows the installer phases and first boot in total.
+        type: int
+        default: 14400
+      macos_template_skip_provision:
         description: Skip the in-guest provisioning play (FINALIZE still converts to a template).
         type: bool
         default: false
-      macos_task_timeout:
+      macos_template_task_timeout:
         description: Seconds to wait on a Proxmox download/async task before failing.
         type: int
         default: 7200
-      macos_ip_retries:
+      macos_template_ip_retries:
         description: How many times (x5s) to poll for the guest's DHCP lease during FINALIZE.
         type: int
-        default: 60
-      macos_ssh_wait_timeout:
-        description: Seconds to wait for SSH to open on the guest during FINALIZE.
-        type: int
         default: 120
-      macos_install_guest_agent:
+      macos_template_ssh_wait_timeout:
+        description: Seconds to wait for SSH to open on the guest during FINALIZE (the first boot enables it).
+        type: int
+        default: 600
+      macos_template_install_guest_agent:
         description: Install the macOS QEMU guest agent (required for Ludus IP discovery).
         type: bool
         default: true
-      macos_guest_agent_url:
+      macos_template_guest_agent_url:
         description: URL of the macOS guest-agent binary to download in-guest.
         type: str
         default: https://github.com/mav2287/mac-guest-agent/releases/download/v2.5.6/mac-guest-agent
-      macos_guest_agent_checksum:
+      macos_template_guest_agent_checksum:
         description: "Checksum of the guest-agent binary as C(sha<bits>:hex) (md5 is not accepted; shasum has no md5)."
         type: str
         default: "sha256:fa501be5d8707b92b6b112d359007bb12163d5e95b3931f1fd7307b42afc03aa"
-      macos_install_clt:
+      macos_template_install_clt:
         description: Install the Command Line Tools in-guest so C(/usr/bin/python3) exists for Ludus deploy.
         type: bool
         default: true
-      macos_embed_opencore:
+      macos_template_embed_opencore:
         description: Embed OpenCore's EFI onto the disk ESP so the template needs no attached boot ISO.
         type: bool
         default: true

@@ -24,11 +24,12 @@ ludus range deploy
 | --- | --- | --- |
 | Packer templates | 14 — see [`templates/`](templates/README.md) | Debian 13 base, Ninjasploitable, the AppX-sysprep-fixed Windows 10/11/Server 2022 images, Server 2022 + Exchange 2019, FLARE VM, Metasploitable 2/3 (imported images) and five OpenCore-booted macOS releases. |
 | Blueprint | `example` | One VM from the Debian 13 template; proves the source installs and deploys end to end. See [`blueprints/`](blueprints/README.md). |
-| Ansible collection | `get_sybers.templates` | The template-build content the Windows, macOS and Metasploitable templates run (ngen, OpenCore macOS orchestration, imported-image provisioning). Install it with those templates: `--source-collections get_sybers.templates`. See [`ansible/`](ansible/README.md). |
+| Ansible collection | `get_sybers.templates` | The template-build content the Windows, macOS and Metasploitable templates run (ngen, the unattended OpenCore macOS build, imported-image provisioning). Maintained in [Get-Sybers/FGNW](https://github.com/Get-Sybers/FGNW); this copy adds the Metasploitable role. See [`ansible/`](ansible/README.md). |
 
-Templates that need the collection, or the `badsectorlabs.ludus_flarevm` role, say so in the "Needs" column of
-the [template index](templates/README.md); the Ludus server exports the building user's installed roles and
-collections to every template build.
+The five templates FGNW also ships (`ninjasploitable`, the two Server 2022 images, Windows 10 AppX-fix, macOS
+Sequoia) are synced from that repository; the Windows, macOS and Metasploitable templates install the
+collection they need at build time from a pinned git source, and the "Needs" column of the
+[template index](templates/README.md) lists what else a build expects.
 
 ## Layout
 

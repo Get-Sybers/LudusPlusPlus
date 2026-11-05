@@ -1,6 +1,5 @@
 The **workstation** counterpart to `win2022-server-x64-appxfix`. FGNW
-workstations run **Windows 10** (operator, 2026-08-06); this is the image they
-use.
+workstations run **Windows 10**; this is the image they use.
 Derived from `templates/win10-22h2-x64-enterprise` in the **Bad Sector Labs**
 Ludus source ([`badsectorlabs/ludus-source-bsl`](https://github.com/badsectorlabs/ludus-source-bsl),
 AGPL-3.0-or-later), which is registered on this server as source
@@ -8,6 +7,7 @@ AGPL-3.0-or-later), which is registered on this server as source
 `Autounattend.xml`, `scripts/`, `iso/`), so this copy is upstream's files plus
 the changes listed below. It keeps a **distinct** `vm_name` rather than
 shadowing upstream's — same reasoning as the server derivative.
+
 1. **`scripts/remove-appx-sysprep-blockers.ps1`**, added as the **final**
    provisioner. This is the point of the template.
 2. **`iso_download_pve = true`.** Upstream omits it; the Ludus stock templates
@@ -30,6 +30,7 @@ remains", pass its own check — and still ship a template that fails sysprep at
 deploy time on some other package. That is a false green of precisely the kind
 this repo exists to prevent.
 This script therefore matches the **condition**, not a package name:
+
 - enumerate every non-framework, removable package installed for any user whose
   name is absent from the provisioned list;
 - remove the per-user installs;
@@ -40,12 +41,14 @@ primary target, and they are fatal.
 ⚠️ **Cutover warning:** do **not** repoint range configs at
 `win10-22h2-x64-enterprise-appxfix-template` until `ludus templates list` shows
 it built. Repointing first makes deploys fail at VM creation.
+
 ```bash
 ludus templates add -d templates/win10-22h2-x64-enterprise-appxfix
 ludus templates build -n win10-22h2-x64-enterprise-appxfix-template
 ludus templates logs -f
 ludus templates list
 ```
+
 In the build log look for the `=== remove-appx-sysprep-blockers ===` transcript:
 it lists every blocker found and removed, and **fails the build** if any
 remains.

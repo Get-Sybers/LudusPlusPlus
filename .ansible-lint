@@ -28,9 +28,5 @@ mock_roles:
   - badsectorlabs.ludus_flarevm
 
 # Template-build playbooks run against a bare installer image over password SSH;
-# they legitimately use `hosts: all` with become.
-skip_list:
-  # The vendored get_sybers.templates collection prefixes the macos_template role's
-  # variables with `macos_` rather than `macos_template_`; renaming them is a change to
-  # a role that drives real Proxmox hosts, not a lint fix.
-  - var-naming[no-role-prefix]
+# they legitimately use `hosts: all` with become. Nothing is skipped.
+skip_list: []

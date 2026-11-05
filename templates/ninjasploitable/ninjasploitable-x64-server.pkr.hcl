@@ -135,24 +135,60 @@ source "proxmox-iso" "ninjasploitable-x64-server" {
 }
 build {
   sources = ["source.proxmox-iso.ninjasploitable-x64-server"]
+
   # #365 + #461 — bake the ninjasploitable vulnerable-service + realmd/sssd AD-join
-  # packages AND the themed vulnerable web content so a fresh clone already serves
-  # /vulnerable/, /reports and the landing page before any deploy-time role runs.
-  provisioner "ansible" {
-    playbook_file      = "ansible/reset-ssh-host-keys.yml"
-    use_proxy          = false
-    user               = "${var.ssh_username}"
-    extra_arguments    = ["--extra-vars", "{ansible_python_interpreter: /usr/bin/python3, ansible_password: ${var.ssh_password}, ansible_sudo_pass: ${var.ssh_password}}"]
-    ansible_env_vars   = ["ANSIBLE_HOME=${var.ansible_home}", "ANSIBLE_LOCAL_TEMP=${var.ansible_home}/tmp", "ANSIBLE_PERSISTENT_CONTROL_PATH_DIR=${var.ansible_home}/pc", "ANSIBLE_SSH_CONTROL_PATH_DIR=${var.ansible_home}/cp"]
-    skip_version_check = true
+  # packages AND the themed vulnerable web content (incl. /reports/intake.php and the
+  # intentionally-vulnerable MariaDB) so a fresh clone already serves /vulnerable with
+  # no deploy step. The play self-gates on /var/lib/ludus/ninjasploitable_content_baked
+  # (written last), so a rebuild over a good bake is a no-op. community.general
+  # (apache2_module) and ansible.mysql (mysql_user/mysql_db) install from
+  # requirements.yml first.
+  #
+  # Not via the ansible provisioner's `galaxy_file`: the plugin runs ansible-galaxy
+  # with packer's own environment, not `ansible_env_vars`, so on a Ludus server
+  # (the service runs with ProtectHome=read-only) it dies creating ~/.ansible/tmp.
+  # Installed here with ANSIBLE_HOME under ansible_home instead; the collections land
+  # in the first entry of the ANSIBLE_COLLECTIONS_PATH Ludus exports (the user's
+  # collections), where the ansible provisioner below finds them without an override.
+  provisioner "shell-local" {
+    environment_vars = [
+      "ANSIBLE_HOME=${var.ansible_home}",
+      "ANSIBLE_LOCAL_TEMP=${var.ansible_home}/tmp",
+    ]
+    inline = ["ansible-galaxy collection install -r \"${path.root}/requirements.yml\""]
   }
   provisioner "ansible" {
-    playbook_file      = "ansible/ninjasploitable-bake.yml"
-    use_proxy          = false
-    user               = "${var.ssh_username}"
-    extra_arguments    = ["--extra-vars", "{ansible_python_interpreter: /usr/bin/python3, ansible_password: ${var.ssh_password}, ansible_sudo_pass: ${var.ssh_password}}"]
-    ansible_env_vars   = ["ANSIBLE_HOME=${var.ansible_home}", "ANSIBLE_LOCAL_TEMP=${var.ansible_home}/tmp", "ANSIBLE_PERSISTENT_CONTROL_PATH_DIR=${var.ansible_home}/pc", "ANSIBLE_SSH_CONTROL_PATH_DIR=${var.ansible_home}/cp"]
+    playbook_file = "ansible/ninjasploitable-bake.yml"
+    use_proxy     = false
+    user          = "${var.ssh_username}"
+    extra_arguments = [
+      "--extra-vars", "ansible_password=${var.ssh_password} ansible_become_pass=${var.ssh_password}",
+    ]
+    ansible_env_vars = [
+      "ANSIBLE_HOME=${var.ansible_home}",
+      "ANSIBLE_LOCAL_TEMP=${var.ansible_home}/tmp",
+      "ANSIBLE_PERSISTENT_CONTROL_PATH_DIR=${var.ansible_home}/pc",
+      "ANSIBLE_SSH_CONTROL_PATH_DIR=${var.ansible_home}/cp",
+      "ANSIBLE_HOST_KEY_CHECKING=False",
+    ]
     skip_version_check = true
-    timeout            = "1h" // package installs + content; the marker makes re-runs a no-op
+  }
+
+  # Stock BSL Debian behaviour: install a first-boot oneshot that regenerates unique
+  # SSH host keys on each clone and then disables itself. Kept last.
+  provisioner "ansible" {
+    playbook_file = "ansible/reset-ssh-host-keys.yml"
+    use_proxy     = false
+    user          = "${var.ssh_username}"
+    extra_arguments = [
+      "--extra-vars", "ansible_password=${var.ssh_password} ansible_become_pass=${var.ssh_password}",
+    ]
+    ansible_env_vars = [
+      "ANSIBLE_HOME=${var.ansible_home}",
+      "ANSIBLE_LOCAL_TEMP=${var.ansible_home}/tmp",
+      "ANSIBLE_PERSISTENT_CONTROL_PATH_DIR=${var.ansible_home}/pc",
+      "ANSIBLE_SSH_CONTROL_PATH_DIR=${var.ansible_home}/cp",
+    ]
+    skip_version_check = true
   }
 }

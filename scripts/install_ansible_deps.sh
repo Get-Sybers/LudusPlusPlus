@@ -30,6 +30,15 @@ for dir in "$ROOT"/ansible/collections/*/; do
   ansible-galaxy collection install --no-deps --force -p "$DEST" "$dir"
 done
 
+# What each template installs for itself at build time (templates/*/requirements.yml:
+# git pins and Galaxy names), so ansible-lint resolves the same content a build would.
+for req in "$ROOT"/templates/*/requirements.yml; do
+  echo "installing the build-time requirements of $(basename "$(dirname "$req")")"
+  if ! ansible-galaxy collection install --no-deps -r "$req" -p "$DEST"; then
+    echo "::warning::could not install $req; ansible-lint may report unknown modules" >&2
+  fi
+done
+
 echo
 echo "export ANSIBLE_COLLECTIONS_PATH=\"$DEST\""
 if [ -n "${GITHUB_ENV:-}" ]; then echo "ANSIBLE_COLLECTIONS_PATH=$DEST" >> "$GITHUB_ENV"; fi

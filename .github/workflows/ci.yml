@@ -45,6 +45,15 @@ jobs:
       - name: Linter self-tests
         run: python -m pytest -q tests
 
+      - name: ludus-reference/ matches the upstream commits it records
+        # Re-derive from the exact commits versions.json records as provenance (not
+        # main), so a hand-edited or stale reference fails here; upstream Ludus
+        # advancing is the weekly ludus-reference-drift job's signal, not a PR gate.
+        run: |
+          ludus_ref="$(python -c "import json; print(json.load(open('ludus-reference/versions.json'))['provenance']['ludus']['commit'])")"
+          bsl_ref="$(python -c "import json; print(json.load(open('ludus-reference/versions.json'))['provenance']['ludus_source_bsl']['commit'])")"
+          python scripts/update_ludus_reference.py --check --ref "$ludus_ref" --bsl-ref "$bsl_ref"
+
   packer:
     name: Packer fmt + validate with the Ludus plugin set
     runs-on: ubuntu-latest
