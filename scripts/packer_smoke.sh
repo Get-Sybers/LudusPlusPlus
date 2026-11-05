@@ -24,7 +24,7 @@ TEMPLATES_DIR="$ROOT/templates"
 RUN_FMT=1
 RUN_INSPECT=0
 
-while [ $# -gt 0 ]; do
+while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-fmt) RUN_FMT=0 ;;
     --inspect) RUN_INSPECT=1 ;;
@@ -34,7 +34,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if [ -x "$TOOLS/bin/packer" ] && ! command -v packer >/dev/null 2>&1; then
+if [[ -x "$TOOLS/bin/packer" ]] && ! command -v packer >/dev/null 2>&1; then
   export PATH="$TOOLS/bin:$PATH"
 fi
 command -v packer >/dev/null 2>&1 || { echo "packer not found; run scripts/install_ludus_packer.sh" >&2; exit 2; }
@@ -89,11 +89,11 @@ shopt -s nullglob
 for tdir in "$TEMPLATES_DIR"/*/; do
   tdir="${tdir%/}"
   files=("$tdir"/*.pkr.hcl "$tdir"/*.pkr.json)
-  if [ ${#files[@]} -eq 0 ]; then
+  if [[ ${#files[@]} -eq 0 ]]; then
     # nested packer files are reported by the structural linter; nothing to validate here
     continue
   fi
-  if [ ${#files[@]} -gt 1 ]; then
+  if [[ ${#files[@]} -gt 1 ]]; then
     echo "::error file=${tdir#"$ROOT"/}::more than one Packer file in $(basename "$tdir")"
     failures=$((failures + 1)); continue
   fi
@@ -104,7 +104,7 @@ for tdir in "$TEMPLATES_DIR"/*/; do
   (
     cd "$tdir"
     status=0
-    if [ "$RUN_FMT" -eq 1 ] && [[ "$pfile" == *.pkr.hcl ]]; then
+    if [[ "$RUN_FMT" -eq 1 ]] && [[ "$pfile" == *.pkr.hcl ]]; then
       if ! packer fmt -check -diff "$(basename "$pfile")"; then
         echo "::error file=$relfile::packer fmt -check failed (run: packer fmt $relfile)"
         status=1
@@ -120,7 +120,7 @@ for tdir in "$TEMPLATES_DIR"/*/; do
       echo "::error file=$relfile::packer validate failed with the Ludus variable set"
       status=1
     fi
-    if [ "$RUN_INSPECT" -eq 1 ]; then
+    if [[ "$RUN_INSPECT" -eq 1 ]]; then
       packer inspect "$(basename "$pfile")" || true
     fi
     exit $status
@@ -128,8 +128,8 @@ for tdir in "$TEMPLATES_DIR"/*/; do
   echo
 done
 
-if [ "$count" -eq 0 ]; then
+if [[ "$count" -eq 0 ]]; then
   echo "no templates found under $TEMPLATES_DIR"
 fi
 echo "packer_smoke: $count template(s) checked, $failures failure(s)"
-[ "$failures" -eq 0 ]
+[[ "$failures" -eq 0 ]]

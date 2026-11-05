@@ -37,11 +37,11 @@ done
 # role this copy keeps), and the repository's content is what the lint must resolve.
 for dir in "$ROOT"/ansible/collections/*/; do
   dir="${dir%/}"
-  [ -f "$dir/galaxy.yml" ] || continue
+  [[ -f "$dir/galaxy.yml" ]] || continue
   echo "installing source collection $(basename "$dir")"
   ansible-galaxy collection install --no-deps --force -p "$DEST" "$dir"
 done
 
 echo
 echo "export ANSIBLE_COLLECTIONS_PATH=\"$DEST\""
-if [ -n "${GITHUB_ENV:-}" ]; then echo "ANSIBLE_COLLECTIONS_PATH=$DEST" >> "$GITHUB_ENV"; fi
+if [[ -n "${GITHUB_ENV:-}" ]]; then echo "ANSIBLE_COLLECTIONS_PATH=$DEST" >> "$GITHUB_ENV"; fi

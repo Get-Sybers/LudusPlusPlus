@@ -46,14 +46,14 @@ esac
 sha256_check() { # <file> <expected>
   local actual
   if command -v sha256sum >/dev/null 2>&1; then actual="$(sha256sum "$1" | awk '{print $1}')"; else actual="$(shasum -a 256 "$1" | awk '{print $1}')"; fi
-  [ "$actual" = "$2" ] || { echo "checksum mismatch for $1: $actual != $2" >&2; return 1; }
+  [[ "$actual" = "$2" ]] || { echo "checksum mismatch for $1: $actual != $2" >&2; return 1; }
 }
 unzip_to() { # <zip> <dir>
   if command -v unzip >/dev/null 2>&1; then unzip -qq -o "$1" -d "$2"; else python3 -c 'import sys,zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$1" "$2"; fi
 }
 
 # --- Packer -------------------------------------------------------------------
-if [ -x "$BIN/packer" ] && [ "$("$BIN/packer" version 2>/dev/null | head -n1)" = "Packer v$PACKER_VERSION" ]; then
+if [[ -x "$BIN/packer" ]] && [[ "$("$BIN/packer" version 2>/dev/null | head -n1)" = "Packer v$PACKER_VERSION" ]]; then
   echo "packer v$PACKER_VERSION already installed in $BIN"
 else
   base="https://releases.hashicorp.com/packer/$PACKER_VERSION"
@@ -62,7 +62,7 @@ else
   curl -fsSL -o "$zip" "$base/packer_${PACKER_VERSION}_${OS}_${ARCH}.zip"
   curl -fsSL -o "$zip.sums" "$base/packer_${PACKER_VERSION}_SHA256SUMS"
   expected="$(awk -v f="packer_${PACKER_VERSION}_${OS}_${ARCH}.zip" '$2==f {print $1}' "$zip.sums")"
-  [ -n "$expected" ] || { echo "no checksum for packer_${PACKER_VERSION}_${OS}_${ARCH}.zip in SHA256SUMS" >&2; exit 1; }
+  [[ -n "$expected" ]] || { echo "no checksum for packer_${PACKER_VERSION}_${OS}_${ARCH}.zip in SHA256SUMS" >&2; exit 1; }
   sha256_check "$zip" "$expected"
   tmp="$(mktemp -d)"
   unzip_to "$zip" "$tmp"
@@ -95,7 +95,7 @@ install_plugin() { # <source like github.com/owner/name> <version>
   curl -fsSL -o "$zip" "https://github.com/$owner/$repo/releases/download/v$version/${binary}.zip"
   curl -fsSL -o "$sums" "https://github.com/$owner/$repo/releases/download/v$version/${repo}_v${version}_SHA256SUMS"
   expected="$(awk -v f="${binary}.zip" '$2==f {print $1}' "$sums")"
-  [ -n "$expected" ] || { echo "no checksum for ${binary}.zip" >&2; return 1; }
+  [[ -n "$expected" ]] || { echo "no checksum for ${binary}.zip" >&2; return 1; }
   sha256_check "$zip" "$expected"
   tmp="$(mktemp -d)"
   unzip_to "$zip" "$tmp"
@@ -121,5 +121,5 @@ echo
 echo "export PATH=\"$BIN:\$PATH\""
 echo "export PACKER_PLUGIN_PATH=\"$PLUGINS\""
 # Propagate to later GitHub Actions steps when running in a workflow.
-if [ -n "${GITHUB_PATH:-}" ]; then echo "$BIN" >> "$GITHUB_PATH"; fi
-if [ -n "${GITHUB_ENV:-}" ]; then echo "PACKER_PLUGIN_PATH=$PLUGINS" >> "$GITHUB_ENV"; fi
+if [[ -n "${GITHUB_PATH:-}" ]]; then echo "$BIN" >> "$GITHUB_PATH"; fi
+if [[ -n "${GITHUB_ENV:-}" ]]; then echo "PACKER_PLUGIN_PATH=$PLUGINS" >> "$GITHUB_ENV"; fi

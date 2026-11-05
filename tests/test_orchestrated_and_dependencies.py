@@ -257,3 +257,20 @@ def test_git_pinned_collection_requirement_is_accepted(lint, source):
     findings, by_rule = lint(source)
     assert "T021" not in by_rule, [f.as_text() for f in by_rule.get("T021", [])]
     assert not [f for f in findings if f.level == "error"], [f.as_text() for f in findings if f.level == "error"]
+
+
+def test_git_requirement_on_a_branch_is_an_error(lint, source):
+    (source / DEBIAN.parent / "requirements.yml").write_text(
+        "collections:\n  - name: git+https://github.com/Get-Sybers/FGNW.git#/ansible/collections/get_sybers.templates\n    version: main\n",
+        encoding="utf-8",
+    )
+    edit(source / DEBIAN, "  provisioner \"ansible\" {\n", "  provisioner \"shell-local\" {\n    environment_vars = [\"ANSIBLE_HOME=${var.ansible_home}\"]\n    inline           = [\"ansible-galaxy collection install -r \\\"${path.root}/requirements.yml\\\"\"]\n  }\n  provisioner \"ansible\" {\n")
+    _, by_rule = lint(source)
+    assert any("40-hex" in f.message and f.level == "error" for f in by_rule.get("T021", []))
+
+
+def test_galaxy_requirement_without_exact_version_is_a_warning(lint, source):
+    (source / DEBIAN.parent / "requirements.yml").write_text("collections:\n  - name: community.mysql\n    version: \">=3.0.0\"\n", encoding="utf-8")
+    edit(source / DEBIAN, "  provisioner \"ansible\" {\n", "  provisioner \"shell-local\" {\n    environment_vars = [\"ANSIBLE_HOME=${var.ansible_home}\"]\n    inline           = [\"ansible-galaxy collection install -r \\\"${path.root}/requirements.yml\\\"\"]\n  }\n  provisioner \"ansible\" {\n")
+    _, by_rule = lint(source)
+    assert any("exact X.Y.Z" in f.message and f.level == "warning" for f in by_rule.get("T021", []))

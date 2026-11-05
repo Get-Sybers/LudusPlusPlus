@@ -55,8 +55,12 @@ Every push and pull request runs [`ci.yml`](.github/workflows/ci.yml):
 | **source-structure** | `scripts/ludus_source_lint.py` walks the repository the way `ludus source add` does and checks `source.yml`, every blueprint, template, role and collection against the Ludus rules (table below). Findings are GitHub annotations. The linter's own tests run afterwards. |
 | **packer** | Installs Packer and the Packer plugins at the exact versions the Ludus server installs (`badsectorlabs/proxmox`, not `hashicorp/proxmox`, plus `hashicorp/ansible`) and runs `packer fmt -check` and `packer validate` from each template directory with the same `-var` set, `PKR_VAR_*` variables and `PROXMOX_*` environment that `ludus templates build` uses. Unknown builder attributes, undeclared `-var`s, variables without defaults and missing files fail here exactly as they would on a Ludus server. |
 | **ansible-and-yaml** | `yamllint` over the repository and `ansible-lint` (production profile) over the roles, collections and template-build playbooks. |
-| **shell-and-workflows** | `shellcheck` over the scripts and `actionlint` over the workflows. |
+| **shell-and-workflows** | `shellcheck` (every optional check on, `.shellcheckrc`) over the scripts and `actionlint` over the workflows. |
+| **all-green** | Aggregates the four jobs above into the one status check to require on `main`; [`.github/rulesets/main.json`](.github/rulesets/main.json) is the matching branch ruleset (import it with `gh api -X POST repos/<owner>/<repo>/rulesets --input .github/rulesets/main.json`). |
 
+Every job runs with read-only permissions on a pinned runner image, checkouts do not persist credentials,
+and the `source-structure` job also re-derives `ludus-reference/` from the upstream commits it records, so a
+hand-edited or stale reference fails the pull request.
 [`ludus-reference-drift.yml`](.github/workflows/ludus-reference-drift.yml) runs weekly: it re-derives
 `ludus-reference/` from upstream Ludus `main` and opens an issue when the variables, plugin versions,
 credentials, builtin template names or the range-config schema changed, so these rules follow what Ludus
@@ -78,7 +82,9 @@ Run `python scripts/ludus_source_lint.py --list-rules` for the catalogue. In sho
   provisioners set `ANSIBLE_HOME=${var.ansible_home}` and `skip_version_check = true` and never override the
   roles/collections paths Ludus exports; every referenced file exists inside the template directory and no
   `requirements.yml` reaches outside it; Ansible content a template runs is installed by Ludus, shipped by this
-  source, or documented as a prerequisite; Windows templates ship `Autounattend.xml` and use WinRM over HTTPS;
+  source, installed by the template from its own pinned `requirements.yml` (git sources at a commit, Galaxy
+  entries at an exact version), or documented as a prerequisite; Windows templates ship `Autounattend.xml`
+  and use WinRM over HTTPS;
   baked-in credentials match the Ludus `group_vars` for the guest OS; a static `description` (and a real icon or
   none) for the catalog. Orchestrated templates (`source "null"` driving Proxmox from a `shell-local` provisioner)
   must hand the same Ludus variables to their orchestration. Performance recommendations from the Ludus docs are
