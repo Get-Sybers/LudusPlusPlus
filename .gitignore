@@ -1,0 +1,25 @@
+# Packer
+packer_cache/
+crash.log
+*.auto.pkrvars.hcl
+
+# Local CI tooling installed by scripts/install_ludus_packer.sh and `make`
+.tools/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Ansible
+*.retry
+
+# Editors / OS
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

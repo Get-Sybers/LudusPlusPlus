@@ -1,0 +1,101 @@
+name: ci
+
+# Holds every artifact in this Ludus source to the conventions the Ludus server
+# itself relies on. See README.md#continuous-integration for what each job proves.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  source-structure:
+    name: Ludus source structure, templates and blueprints
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules, as `ludus source add` clones)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+
+      - name: Install tooling
+        run: python -m pip install --quiet -r requirements-ci.txt
+
+      - name: Lint the source against the Ludus conventions
+        run: python scripts/ludus_source_lint.py --root . --format github
+
+      - name: Linter self-tests
+        run: python -m pytest -q tests
+
+  packer:
+    name: Packer fmt + validate with the Ludus plugin set
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          submodules: recursive
+
+      - name: Install Packer and plugins at the versions the Ludus server pins
+        env:
+          PACKER_GITHUB_API_TOKEN: ${{ github.token }}
+        run: scripts/install_ludus_packer.sh
+
+      - name: packer fmt -check and packer validate, invoked as `ludus templates build` does
+        run: scripts/packer_smoke.sh --inspect
+
+  ansible-and-yaml:
+    name: yamllint + ansible-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+
+      - name: Install tooling
+        run: python -m pip install --quiet -r requirements-ci.txt
+
+      - name: yamllint
+        run: yamllint --format github .
+
+      - name: ansible-lint
+        run: ansible-lint --offline
+
+  shell-and-workflows:
+    name: shellcheck + actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: shellcheck
+        run: shellcheck -S style scripts/*.sh
+
+      - name: actionlint
+        run: docker run --rm -v "${{ github.workspace }}:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color

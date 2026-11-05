@@ -1,0 +1,27 @@
+# ansible-lint configuration (run by `make lint-ansible` and CI).
+profile: production
+
+exclude_paths:
+  - .git/
+  - .github/
+  - .tools/
+  - .venv/
+  - docs/
+  - ludus-reference/
+  - scripts/
+  - tests/
+  - blueprints/          # range configs are Ludus documents, not playbooks; CI validates them against the Ludus schema
+  - "**/*.png"
+  - "**/*.jpg"
+  - "**/*.gif"
+  - "**/*.webp"
+  - "**/*.iso"
+  - "**/*.xml"
+
+kinds:
+  - playbook: "templates/*/ansible/*.yml"
+  - playbook: "templates/*/ansible/*.yaml"
+
+# Template-build playbooks run against a bare installer image over password SSH;
+# they legitimately use `hosts: all` with become. Nothing is skipped by default.
+skip_list: []
