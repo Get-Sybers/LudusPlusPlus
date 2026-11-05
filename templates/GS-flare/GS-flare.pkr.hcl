@@ -32,7 +32,7 @@ variable "vm_memory" {
 }
 variable "vm_name" {
   type    = string
-  default = "flare-vm-template"
+  default = "GS-flare-template"
 }
 variable "winrm_password" {
   type    = string
@@ -81,7 +81,7 @@ variable "ludus_nat_interface" {
 locals {
   template_description = "Flare VM (Windows 10 22H2 64-bit Enterprise) template built ${legacy_isotime("2006-01-02 03:04:05")} username:password => localuser:password"
 }
-source "proxmox-iso" "flare-vm" {
+source "proxmox-iso" "GS-flare" {
   # Hit the "Press any key to boot from CD ROM"
   boot_wait = "-1s" # To set boot_wait to 0s, use a negative number, such as "-1s"
   boot_command = [  # 120 seconds of enters to cover all different speeds of disks as windows boots
@@ -171,7 +171,7 @@ source "proxmox-iso" "flare-vm" {
   task_timeout         = "20m"
 }
 build {
-  sources = ["source.proxmox-iso.flare-vm"]
+  sources = ["source.proxmox-iso.GS-flare"]
   # Disable Windows Update inline — no local .bat needed (extraction-safe).
   provisioner "powershell" {
     inline = [

@@ -126,10 +126,7 @@ def add_windows_template(root: Path, with_autounattend: bool = True) -> Path:
 # --- baseline -----------------------------------------------------------------
 
 
-ACCEPTED_WARNINGS = {
-    # flare-vm keeps the name the Bad Sector Labs source also uses; a deliberate choice, see templates/README.md
-    ("T003", "templates/flare-vm/flare-vm.pkr.hcl"),
-}
+ACCEPTED_WARNINGS: set[tuple[str, str]] = set()
 
 
 def test_repository_source_is_clean(lint, source):

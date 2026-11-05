@@ -38,7 +38,7 @@ template build.
 | `win11-22h2-x64-enterprise-appxfix-template` | `get_sybers.templates` | Windows 11 22H2 Enterprise with the same AppX sysprep fix. |
 | `win2022-server-x64-appxfix-template` | `get_sybers.templates` | Windows Server 2022 with the AppX sysprep blockers removed and EdgeUpdate disabled at build. Use instead of the stock `win2022-server-x64-template` for VMs that sysprep. |
 | `win2022-exchange2019-x64-template` | `get_sybers.templates` | Windows Server 2022 with the Exchange 2019 CU15 prerequisites and media baked in; derived from `win2022-server-x64-appxfix`. |
-| `flare-vm-template` | role `badsectorlabs.ludus_flarevm` | Windows 10 malware-analysis workstation with FLARE VM tooling (UEFI boot, Defender off). Same name as the Bad Sector Labs FLARE VM template: install one or the other. |
+| `GS-flare-template` | role `badsectorlabs.ludus_flarevm` | Windows 10 malware-analysis workstation with FLARE VM tooling (UEFI boot, Defender off). Named apart from the Bad Sector Labs `flare-vm-template` so both can coexist. |
 
 ### Imported images (orchestrated builds)
 
