@@ -3,7 +3,10 @@
 # and license are inherited by every blueprint in this source.
 manifest_version: 1
 name: "LudusPlusPlus"
-description: "Packer templates, blueprints, and Ansible content for Ludus, with CI that enforces the native Ludus template and source conventions."
+description: >-
+  Get-Sybers Packer templates for Ludus (Debian, AppX-sysprep-fixed Windows, Exchange 2019,
+  FLARE VM, Metasploitable 2/3, OpenCore macOS), the get_sybers.templates build collection,
+  and CI that enforces the native Ludus template and source conventions.
 authors:
   - "Get-Sybers"
 homepage: https://github.com/Get-Sybers/LudusPlusPlus

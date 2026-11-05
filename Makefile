@@ -8,15 +8,19 @@ ACTIONLINT_IMAGE ?= rhysd/actionlint:$(ACTIONLINT_VERSION)
 export LUDUS_CI_TOOLS := $(TOOLS)
 export PATH := $(TOOLS)/bin:$(PATH)
 export PACKER_PLUGIN_PATH := $(TOOLS)/packer-plugins
+export ANSIBLE_COLLECTIONS_PATH := $(TOOLS)/ansible-collections
 
 .DEFAULT_GOAL := help
-.PHONY: help deps lint lint-source lint-yaml lint-ansible lint-shell lint-actions packer-tools packer-fmt packer-validate test check-reference update-reference ci
+.PHONY: help deps ansible-deps lint lint-source lint-yaml lint-ansible lint-shell lint-actions packer-tools packer-fmt packer-validate test check-reference update-reference ci
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 deps: ## Install the Python tooling (requirements-ci.txt)
 	$(PYTHON) -m pip install -r requirements-ci.txt
+
+ansible-deps: ## Install the collections the Ludus server ships + this source's collections into .tools/ (for ansible-lint)
+	scripts/install_ansible_deps.sh "$(TOOLS)"
 
 lint: lint-source lint-yaml lint-ansible lint-shell lint-actions ## Run every linter
 
@@ -26,7 +30,7 @@ lint-source: ## Ludus source structure, template and blueprint rules (scripts/lu
 lint-yaml: ## yamllint over the repository
 	yamllint .
 
-lint-ansible: ## ansible-lint over the Ansible content and template playbooks
+lint-ansible: ## ansible-lint over the Ansible content and template playbooks (run `make ansible-deps` once first)
 	ansible-lint
 
 lint-shell: ## shellcheck the scripts

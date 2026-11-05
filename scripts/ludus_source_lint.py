@@ -72,10 +72,10 @@ RULES: dict[str, tuple[str, str]] = {
     "T004": ("error", "the Ludus build-time variables must be declared exactly as Ludus passes them"),
     "T005": ("error", "every variable Ludus does not set must have a default"),
     "T006": ("warning", "catalog metadata: static description and icon_path variables"),
-    "T007": ("error", "the template must build with the proxmox-iso (or proxmox-clone) builder"),
+    "T007": ("error", "the template must build with the proxmox-iso/proxmox-clone builder, or be an orchestrated template (source \"null\", communicator none, a shell-local provisioner driving Proxmox)"),
     "T008": ("error", "Proxmox builder attributes must be bound to the Ludus variables, not hard-coded"),
     "T009": ("error", "vm_id, template_name and skip_convert_to_template are managed by Ludus; API credentials must never be literal"),
-    "T010": ("error", "communicator must be ssh or winrm and variable \"os\" must be a literal Proxmox OS type"),
+    "T010": ("error", "communicator must be ssh or winrm and variable \"os\" must be a literal Proxmox OS type (absent for macOS, which Ludus classifies by name)"),
     "T011": ("error", "ansible provisioners must set ANSIBLE_HOME=${var.ansible_home} and skip_version_check = true"),
     "T012": ("error", "every file the template references must exist inside the template directory"),
     "T013": ("error", "Windows templates must ship Autounattend.xml in the template root and use WinRM over HTTPS"),
@@ -83,6 +83,10 @@ RULES: dict[str, tuple[str, str]] = {
     "T015": ("info", "Proxmox performance options recommended by the Ludus docs"),
     "T016": ("error", "required_plugins, when present, must name the plugin sources the Ludus server installs"),
     "T017": ("warning", "ansible provisioner conventions (use_proxy = false, ANSIBLE_* temp dirs, no roles/collections path override)"),
+    "T018": ("warning", "Ansible content a template runs must be installed by Ludus, shipped by this source, or installed by the building user"),
+    "T019": ("warning", "deprecated Proxmox builder attributes should use their current form (boot_iso block, type + index)"),
+    "T020": ("warning", "an orchestrated template must hand the Ludus build-time variables to its orchestration"),
+    "T021": ("error", "a template must not install Ansible content from outside its own directory (requirements.yml, galaxy_file)"),
     # Roles / collections
     "R001": ("error", "a role must have tasks/main.yml and meta/main.yml"),
     "R002": ("warning", "a role's meta/main.yml should define galaxy_info.description (shown in the catalog)"),
@@ -264,6 +268,13 @@ class Reference:
         self.templates = load_json(ref_dir / "templates.json")
         self.range_schema = load_json(ref_dir / "range-config.jsonschema")
         self.versions = load_json(ref_dir / "versions.json") if (ref_dir / "versions.json").exists() else {}
+        self.ludus_collections: set[str] = set()
+        self.ludus_roles: set[str] = set()
+        reqs = ref_dir / "ansible-requirements.yml"
+        if reqs.exists():
+            data = load_yaml(reqs) or {}
+            self.ludus_collections = {str(c.get("name")) for c in data.get("collections", []) if isinstance(c, dict) and c.get("name")}
+            self.ludus_roles = {str(r.get("name")) for r in data.get("roles", []) if isinstance(r, dict) and r.get("name")}
 
     @property
     def cli_variables(self) -> list[dict]:
@@ -331,9 +342,9 @@ class Linter:
     def run(self) -> list[Finding]:
         self.lint_root()
         self.lint_submodules()
-        self.lint_templates()
         self.lint_roles()
         self.lint_collections()
+        self.lint_templates()
         self.lint_blueprints()
         if not (self.template_names or self.role_identities or self.collection_fqcns or self._blueprint_dirs()):
             self.report("S001", ".", "no blueprints/, templates/, ansible/roles/ or ansible/collections/ content found; a Ludus source must ship at least one artifact")
@@ -896,6 +907,8 @@ class TemplateContext:
             m = re.fullmatch(r"local\.([A-Za-z_][A-Za-z0-9_]*)", expr)
             if m:
                 return self.resolve_string(self.locals.get(m.group(1)), _depth + 1)
+            if expr in ("path.root", "path.cwd"):
+                return "."  # Ludus runs packer from the template directory
             return None
 
         out: list[str] = []
@@ -926,25 +939,74 @@ class TemplateContext:
 
     # -- driver ------------------------------------------------------------
 
+    def is_orchestrated(self) -> bool:
+        """A template that drives Proxmox itself: only null sources with no communicator, run by shell-local."""
+        if not self.sources or any(typ != "null" for typ, _, _ in self.sources):
+            return False
+        if any(self.resolve_string(body.get("communicator")) != "none" for _, _, body in self.sources):
+            return False
+        return any(typ == "shell-local" for typ, _ in self.provisioners())
+
+    def shell_local_text(self) -> str:
+        """Everything the shell-local provisioners pass to their orchestration, as one string."""
+        parts: list[str] = []
+        for typ, body in self.provisioners():
+            if typ != "shell-local":
+                continue
+            for key in ("inline", "environment_vars", "scripts", "execute_command"):
+                for v in body.get(key, []) or []:
+                    if isinstance(v, str):
+                        parts.append(v)
+            for key in ("script", "command", "inline_shebang"):
+                if isinstance(body.get(key), str):
+                    parts.append(body[key])
+        return "\n".join(parts)
+
     def lint(self) -> None:
         name = self.check_template_name()
         self.check_ludus_variables()
         self.check_other_variables_have_defaults()
         self.check_catalog_metadata()
+        self.orchestrated = self.is_orchestrated()
         sources = self.proxmox_sources()
-        if not sources:
-            types = sorted({s[0] for s in self.sources}) or ["none"]
-            self.report("T007", f"no proxmox-iso source block found (sources: {', '.join(types)}); Ludus builds templates on Proxmox")
         communicator = None
+        if self.orchestrated:
+            self.check_orchestration()
+        elif not sources:
+            types = sorted({s[0] for s in self.sources}) or ["none"]
+            self.report("T007", f"no proxmox-iso source block found (sources: {', '.join(types)}); Ludus builds templates on Proxmox. A template that must drive Proxmox itself uses source \"null\" with communicator = \"none\" and a shell-local provisioner")
         for typ, sname, body in sources:
             communicator = self.check_source(typ, sname, body, name)
-        self.check_os_variable(communicator)
+        self.check_os_variable(communicator, name)
         self.check_provisioners(communicator)
         self.check_required_plugins()
         self.check_file_references()
+        self.check_requirements_files()
+        self.check_ansible_dependencies()
         if communicator == "winrm":
             self.check_windows()
         self.check_credentials(communicator)
+
+    # -- T020 ---------------------------------------------------------------
+
+    def check_orchestration(self) -> None:
+        text = self.shell_local_text()
+        for spec in self.ref.cli_variables:
+            name = spec["name"]
+            if name not in self.variables:
+                continue
+            if re.search(r"\bvar\." + re.escape(name) + r"\b", text):
+                continue
+            level = "info" if name in ("iso_storage_pool", "ansible_home") else None
+            self.report("T020", f"the shell-local orchestration never receives ${{var.{name}}}; hard-coding what Ludus provides ({spec.get('description', '')}) breaks on differently configured servers", 'provisioner "shell-local"', level=level)
+        for typ, body in self.provisioners():
+            if typ != "shell-local":
+                continue
+            for item in body.get("environment_vars", []) or []:
+                text_item = inner(item) if isinstance(item, str) else ""
+                key = text_item.split("=", 1)[0]
+                if key in ("ANSIBLE_ROLES_PATH", "ANSIBLE_COLLECTIONS_PATH"):
+                    self.report("T017", f"shell-local provisioner: do not set {key}; Ludus exports it so the orchestration finds the user's installed roles and collections, and an override hides them", f"{key}=")
 
     # -- T003 ---------------------------------------------------------------
 
@@ -1049,6 +1111,9 @@ class TemplateContext:
         except Exception:
             self.l.report("T006", icon_file, "icon could not be decoded as an image")
             return
+        if max(w, h) < 16:
+            self.l.report("T006", icon_file, f"icon is a {w}x{h} placeholder; Ludus would show an invisible image. Ship a real icon or remove icon_path so the catalog falls back to the OS glyph")
+            return
         if w != h:
             self.l.report("T006", icon_file, f"icon is {w}x{h}; a square transparent PNG (256x256 works well) renders best on template cards", level="info")
         if max(w, h) > 1024:
@@ -1107,7 +1172,17 @@ class TemplateContext:
             self.report("T010", f"{where}: os is not set on the builder; set os = \"${{var.os}}\" so Proxmox gets the right guest type", sname, level="warning")
 
         self._check_performance(where, body)
+        self._check_deprecated(where, body)
         return communicator
+
+    def _check_deprecated(self, where: str, body: dict) -> None:
+        deprecated_top = ("iso_url", "iso_urls", "iso_checksum", "iso_file", "iso_storage_pool", "iso_download_pve", "iso_target_path", "iso_target_extension", "unmount_iso")
+        for attr in deprecated_top:
+            if attr in body:
+                self.report("T019", f"{where}: top-level {attr} is deprecated by the Proxmox plugin; define the installer ISO in a boot_iso {{}} block (iso_url, iso_checksum, iso_storage_pool, iso_download_pve, unmount, keep_cdrom_device)", attr)
+        for n, blk in enumerate(blocks(body, "additional_iso_files")):
+            if "device" in blk:
+                self.report("T019", f"{where}: additional_iso_files[{n}].device is deprecated; use type = \"sata\" and index = \"N\"", "device")
 
     def _resolve_attribute(self, body: dict, attr: str) -> list[tuple[str, Any]]:
         """Resolve 'a[].b' / 'a.b' / 'a' against a source body → [(display, value)]."""
@@ -1155,10 +1230,15 @@ class TemplateContext:
 
     # -- T010 (os variable) ---------------------------------------------------------
 
-    def check_os_variable(self, communicator: str | None) -> None:
+    def check_os_variable(self, communicator: str | None, template_name: str | None = None) -> None:
         os_default = self.var_default("os")
+        if template_name and "macos" in template_name.lower():
+            if "os" in self.variables:
+                self.report("T010", "macOS templates must not declare variable \"os\": Proxmox has no macOS guest type, and Ludus only classifies a template as macOS from the \"macos\" in its name when that variable is absent", 'variable "os"')
+            return
         if "os" not in self.variables:
-            self.report("T010", "no `variable \"os\"`: Ludus reads its literal default to classify the template as Windows or Linux (otherwise it guesses from the name). Add it with a Proxmox OS type such as l26 or win11")
+            level = "warning" if getattr(self, "orchestrated", False) else None
+            self.report("T010", "no `variable \"os\"`: Ludus reads its literal default to classify the template as Windows or Linux (otherwise it guesses from the name). Add it with a Proxmox OS type such as l26 or win11", level=level)
             return
         if not is_literal_string(os_default):
             self.report("T010", "variable \"os\" must have a literal string default; Ludus extracts it with a regular expression", 'variable "os"')
@@ -1241,11 +1321,22 @@ class TemplateContext:
                 for key in ("playbook_file", "galaxy_file", "inventory_file"):
                     if key in body:
                         refs.append((f"provisioner ansible: {key}", body[key], False))
-            elif typ in ("shell", "powershell", "windows-shell", "shell-local"):
+            elif typ in ("shell", "powershell", "windows-shell"):
                 if "script" in body:
                     refs.append((f"provisioner {typ}: script", body["script"], False))
                 for v in body.get("scripts", []) or []:
                     refs.append((f"provisioner {typ}: scripts", v, False))
+            elif typ == "shell-local":
+                if "script" in body:
+                    refs.append((f"provisioner shell-local: script", body["script"], False))
+                for v in body.get("scripts", []) or []:
+                    refs.append((f"provisioner shell-local: scripts", v, False))
+                for key in ("inline", "environment_vars"):
+                    for v in body.get(key, []) or []:
+                        if not isinstance(v, str):
+                            continue
+                        for m in re.finditer(r"\$\{path\.(?:root|cwd)\}/([^\s\"'\\]+)", v):
+                            refs.append((f"provisioner shell-local: {key}", json.dumps("./" + m.group(1)), False))
             elif typ == "file":
                 direction = self.resolve_string(body.get("direction")) if "direction" in body else "upload"
                 if direction != "download":
@@ -1279,6 +1370,130 @@ class TemplateContext:
             return
         if not target.exists():
             self.report("T012", f"{display}: {p!r} does not exist in the template directory", needle)
+
+    # -- T021 ------------------------------------------------------------------
+
+    def check_requirements_files(self) -> None:
+        candidates: list[tuple[Path, str]] = []
+        for name in ("requirements.yml", "requirements.yaml"):
+            if (self.tdir / name).is_file():
+                candidates.append((self.tdir / name, name))
+        for typ, body in self.provisioners():
+            if typ == "ansible" and "galaxy_file" in body:
+                resolved = self.resolve_string(body["galaxy_file"])
+                if resolved and (self.tdir / resolved).is_file():
+                    candidates.append((self.tdir / resolved, f"galaxy_file {resolved}"))
+        seen: set[Path] = set()
+        for path, label_text in candidates:
+            if path in seen:
+                continue
+            seen.add(path)
+            try:
+                data = load_yaml(path)
+            except yaml.YAMLError as exc:
+                self.l.report("T021", path, f"{label_text}: not valid YAML: {exc}")
+                continue
+            if not isinstance(data, dict):
+                continue
+            for section in ("collections", "roles"):
+                for entry in data.get(section) or []:
+                    if isinstance(entry, str):
+                        target = entry
+                        kind = ""
+                    elif isinstance(entry, dict):
+                        target = str(entry.get("src") or entry.get("source") or entry.get("name") or "")
+                        kind = str(entry.get("type") or "")
+                    else:
+                        continue
+                    if kind == "dir" or target.startswith(("../", "./", "/")) or "/../" in target:
+                        self.l.report("T021", path, f"{section} entry {target!r} installs from a filesystem path; Ludus installs each templates/<name>/ directory on its own, so that path does not exist at build time. Ship the content under ansible/collections/ or ansible/roles/ of this source and rely on the ANSIBLE_COLLECTIONS_PATH / ANSIBLE_ROLES_PATH Ludus exports to builds", find_line(path, target.split("/")[-1]))
+            if label_text.startswith("requirements") and not any(typ == "ansible" and "galaxy_file" in body for typ, body in self.provisioners()) and "requirements" not in self.shell_local_text():
+                self.l.report("T021", path, "requirements.yml is not referenced by any provisioner; Ludus never installs it for a template (declare template dependencies in the README instead)", level="info")
+
+    # -- T018 ------------------------------------------------------------------
+
+    def _playbook_files(self) -> list[Path]:
+        out: list[Path] = []
+        for typ, body in self.provisioners():
+            if typ == "ansible" and "playbook_file" in body:
+                resolved = self.resolve_string(body["playbook_file"])
+                if resolved and (self.tdir / resolved).is_file():
+                    out.append(self.tdir / resolved)
+        return out
+
+    def _collect_ansible_refs(self, node: Any, collections: set[str], roles: set[str], depth: int = 0) -> None:
+        if depth > 12:
+            return
+        if isinstance(node, list):
+            for item in node:
+                self._collect_ansible_refs(item, collections, roles, depth + 1)
+            return
+        if not isinstance(node, dict):
+            return
+        for key, value in node.items():
+            k = str(key)
+            if k in ("roles",) and isinstance(value, list):
+                for role in value:
+                    rname = role if isinstance(role, str) else (role.get("role") or role.get("name") if isinstance(role, dict) else None)
+                    if rname:
+                        roles.add(str(rname))
+            elif k.endswith(("import_role", "include_role")) and isinstance(value, dict) and value.get("name"):
+                roles.add(str(value["name"]))
+            elif k.endswith(("import_playbook", "include_playbook")) and isinstance(value, str):
+                parts = value.split(".")
+                if len(parts) == 3 and not value.endswith((".yml", ".yaml")):
+                    collections.add(f"{parts[0]}.{parts[1]}")
+            elif k.count(".") >= 2 and re.fullmatch(r"[a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_]+", k):
+                collections.add(".".join(k.split(".")[:2]))
+            if isinstance(value, (list, dict)):
+                self._collect_ansible_refs(value, collections, roles, depth + 1)
+
+    def _readme_text(self) -> str:
+        for name in ("README.md", "README.rst", "README.txt", "README"):
+            path = self.tdir / name
+            if path.is_file():
+                return path.read_text(encoding="utf-8", errors="replace")
+        return ""
+
+    def check_ansible_dependencies(self) -> None:
+        collections: set[str] = set()
+        roles: set[str] = set()
+        readme = self._readme_text()
+        for pb in self._playbook_files():
+            try:
+                data = load_yaml(pb)
+            except yaml.YAMLError:
+                continue
+            self._collect_ansible_refs(data, collections, roles)
+        text = self.shell_local_text()
+        for m in re.finditer(r"ansible-playbook\s+([a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_]+)\b", text):
+            collections.add(".".join(m.group(1).split(".")[:2]))
+        for m in re.finditer(r"ANSIBLE_PLAYBOOK=([a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_]+)\b", text):
+            collections.add(".".join(m.group(1).split(".")[:2]))
+        for role in sorted(roles):
+            parts = role.split(".")
+            if len(parts) >= 3:
+                collections.add(f"{parts[0]}.{parts[1]}")
+                continue
+            if role in self.l.role_identities:
+                self.report("T018", f"runs role {role!r} shipped by this source; add it to the install (`ludus source add ... --source-roles {role}`) before building", level="info")
+            elif role in self.ref.ludus_roles:
+                continue
+            elif role in readme:
+                self.report("T018", f"runs role {role!r}, which the building user must install first (`ludus ansible role add {role}`); the template README documents it", level="info")
+            else:
+                self.report("T018", f"runs role {role!r}, which neither Ludus nor this source installs; the building user must add it first (`ludus ansible role add {role}`) - say so in the template README")
+        for fqcn in sorted(collections):
+            if fqcn in ("ansible.builtin", "ansible.legacy"):
+                continue
+            if fqcn in self.ref.ludus_collections:
+                continue
+            if fqcn in self.l.collection_fqcns:
+                self.report("T018", f"runs content from collection {fqcn}, shipped by this source; install it with the template (`ludus source add ... --source-collections {fqcn}`)", level="info")
+            elif fqcn in readme:
+                self.report("T018", f"runs content from collection {fqcn}, which the building user must install first (`ludus ansible collection add {fqcn}`); the template README documents it", level="info")
+            else:
+                self.report("T018", f"runs content from collection {fqcn}, which neither Ludus (ludus-reference/ansible-requirements.yml) nor this source installs; the building user must add it first (`ludus ansible collection add {fqcn}`) - say so in the template README")
 
     # -- T013 ------------------------------------------------------------------
 
@@ -1335,6 +1550,12 @@ class TemplateContext:
                 continue
             if (user, password) != (expected["user"], expected["password"]):
                 self.report("T014", f"source {typ}.{sname}: credentials {user}:{password} differ from what Ludus uses for {group} guests ({expected['user']}:{expected['password']} from range-management/group_vars/{group}.yml); VMs cloned from this template cannot be configured by `ludus range deploy` unless the range uses certificate auth", user_key)
+        if getattr(self, "orchestrated", False):
+            for typ, sname, body in self.sources:
+                user = self.resolve_string(self.var_default("ssh_username")) if "ssh_username" in self.variables else None
+                password = self.resolve_string(self.var_default("ssh_password")) if "ssh_password" in self.variables else None
+                if user and password and (user, password) != (expected["user"], expected["password"]):
+                    self.report("T014", f"orchestrated template bakes {user}:{password}, not the {expected['user']}:{expected['password']} Ludus uses for {group} guests; range configs must treat its VMs as unmanaged or supply credentials another way", 'variable "ssh_username"', level="info")
 
 
 # ---------------------------------------------------------------------------

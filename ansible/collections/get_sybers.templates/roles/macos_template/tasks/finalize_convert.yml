@@ -1,0 +1,86 @@
+---
+- name: "Request a graceful ACPI shutdown (belt-and-suspenders)"
+  no_log: true
+  ansible.builtin.uri:
+    url: "{{ macos_api_host }}/api2/json/nodes/{{ macos_node_target }}/qemu/{{ macos_vmid }}/status/shutdown"
+    method: POST
+    headers: "{{ macos_auth_headers }}"
+    validate_certs: "{{ macos_validate_certs }}"
+  failed_when: false
+- name: "Wait for the VM to stop (poll status)"
+  no_log: true
+  ansible.builtin.uri:
+    url: "{{ macos_api_host }}/api2/json/nodes/{{ macos_node_target }}/qemu/{{ macos_vmid }}/status/current"
+    method: GET
+    headers: "{{ macos_auth_headers }}"
+    validate_certs: "{{ macos_validate_certs }}"
+  register: macos_stat
+  until: macos_stat.json.data.status == "stopped"
+  retries: 36
+  delay: 5
+  failed_when: false
+- name: "Force-stop if it did not shut down gracefully"
+  when: macos_stat.json.data.status | default('') != 'stopped'
+  block:
+    - name: "Issue an API stop"
+      no_log: true
+      ansible.builtin.uri:
+        url: "{{ macos_api_host }}/api2/json/nodes/{{ macos_node_target }}/qemu/{{ macos_vmid }}/status/stop"
+        method: POST
+        headers: "{{ macos_auth_headers }}"
+        validate_certs: "{{ macos_validate_certs }}"
+    - name: "Wait for the forced stop"
+      no_log: true
+      ansible.builtin.uri:
+        url: "{{ macos_api_host }}/api2/json/nodes/{{ macos_node_target }}/qemu/{{ macos_vmid }}/status/current"
+        method: GET
+        headers: "{{ macos_auth_headers }}"
+        validate_certs: "{{ macos_validate_certs }}"
+      register: macos_stat2
+      until: macos_stat2.json.data.status == "stopped"
+      retries: 24
+      delay: 5
+- name: "Remove install media (OpenCore embedded on disk -> drop both ISOs)"
+  when: macos_oc_embedded | default(false) | bool
+  no_log: true
+  ansible.builtin.uri:
+    url: "{{ macos_api_host }}/api2/json/nodes/{{ macos_node_target }}/qemu/{{ macos_vmid }}/config"
+    method: PUT
+    headers: "{{ macos_auth_headers }}"
+    validate_certs: "{{ macos_validate_certs }}"
+    body_format: form-urlencoded
+    body:
+      delete: "ide0,ide2"
+      boot: "order=sata0"
+  failed_when: false
+- name: "Detach only the installer ISO (OpenCore stays the boot CD)"
+  when: not (macos_oc_embedded | default(false) | bool)
+  no_log: true
+  ansible.builtin.uri:
+    url: "{{ macos_api_host }}/api2/json/nodes/{{ macos_node_target }}/qemu/{{ macos_vmid }}/config"
+    method: PUT
+    headers: "{{ macos_auth_headers }}"
+    validate_certs: "{{ macos_validate_certs }}"
+    body_format: form-urlencoded
+    body:
+      ide2: "none,media=cdrom"
+  failed_when: false
+- name: "Convert the VM to a Ludus template"
+  no_log: true
+  ansible.builtin.uri:
+    url: "{{ macos_api_host }}/api2/json/nodes/{{ macos_node_target }}/qemu/{{ macos_vmid }}/template"
+    method: POST
+    headers: "{{ macos_auth_headers }}"
+    validate_certs: "{{ macos_validate_certs }}"
+  register: macos_tmpl
+- name: "Wait for the template conversion task (if it runs asynchronously)"
+  ansible.builtin.include_tasks: _wait_task.yml
+  vars:
+    wt_upid: "{{ macos_tmpl.json.data }}"
+    wt_node: "{{ macos_node_target }}"
+  when: macos_tmpl.json.data is string and macos_tmpl.json.data.startswith('UPID:')
+- name: "FINALIZE complete"
+  ansible.builtin.debug:
+    msg: >-
+      Done. Template '{{ macos_vm_name }}' is VM {{ macos_vmid }} on {{ macos_node_target }}
+      ({{ 'OpenCore embedded on disk; ISOs removed' if (macos_oc_embedded | default(false) | bool) else 'OpenCore ISO retained as boot CD' }}).

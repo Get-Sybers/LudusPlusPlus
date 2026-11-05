@@ -2,6 +2,8 @@
 packer_cache/
 crash.log
 *.auto.pkrvars.hcl
+# A galaxy install inside a template directory is a build artifact, never content
+templates/*/collections/
 
 # Local CI tooling installed by scripts/install_ludus_packer.sh and `make`
 .tools/

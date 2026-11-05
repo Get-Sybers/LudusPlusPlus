@@ -11,6 +11,7 @@ rely on, and writes them to ludus-reference/:
   credentials.json         per-OS credentials from range-management/group_vars
   templates.json           builtin + Bad Sector Labs template names
   range-config.jsonschema  verbatim copy of the range config schema
+  ansible-requirements.yml verbatim copy of the collections and roles the Ludus server installs
 
 With --check nothing is written: the files are regenerated into a temporary
 directory and compared with the committed copies (provenance commit/date
@@ -41,6 +42,7 @@ LUDUS_PATHS = [
     "ludus-server/ansible/user-files/range-config.jsonschema",
     "ludus-server/packer/*/*.pkr.hcl",
     "ludus-server/packer/README.md",
+    "ludus-server/ansible/requirements.yml",
 ]
 
 # Human text for the variables Ludus passes. New upstream variables get a generic
@@ -306,6 +308,7 @@ def generate(out: Path, ludus_ref: str, bsl_ref: str) -> None:
         for name, data in files.items():
             (out / name).write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         shutil.copyfile(ludus / "ludus-server" / "ansible" / "user-files" / "range-config.jsonschema", out / "range-config.jsonschema")
+        shutil.copyfile(ludus / "ludus-server" / "ansible" / "requirements.yml", out / "ansible-requirements.yml")
         json.loads((out / "range-config.jsonschema").read_text(encoding="utf-8"))  # must be valid JSON
 
 

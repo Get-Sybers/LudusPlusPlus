@@ -22,9 +22,13 @@ ludus range deploy
 
 | Artifact | Name | Notes |
 | --- | --- | --- |
-| Packer template | `ludusplusplus-debian-13-x64-server-template` | Debian 13 (Trixie) minimal server, `debian:debian`, built from the Ludus Packer starter. See [`templates/`](templates/README.md). |
-| Blueprint | `example` | One VM from the template above; proves the source installs and deploys end to end. See [`blueprints/`](blueprints/README.md). |
-| Ansible roles / collections | none yet | Vendor them under [`ansible/`](ansible/README.md), as directories or git submodules. |
+| Packer templates | 14 — see [`templates/`](templates/README.md) | Debian 13 base, Ninjasploitable, the AppX-sysprep-fixed Windows 10/11/Server 2022 images, Server 2022 + Exchange 2019, FLARE VM, Metasploitable 2/3 (imported images) and five OpenCore-booted macOS releases. |
+| Blueprint | `example` | One VM from the Debian 13 template; proves the source installs and deploys end to end. See [`blueprints/`](blueprints/README.md). |
+| Ansible collection | `get_sybers.templates` | The template-build content the Windows, macOS and Metasploitable templates run (ngen, OpenCore macOS orchestration, imported-image provisioning). Install it with those templates: `--source-collections get_sybers.templates`. See [`ansible/`](ansible/README.md). |
+
+Templates that need the collection, or the `badsectorlabs.ludus_flarevm` role, say so in the "Needs" column of
+the [template index](templates/README.md); the Ludus server exports the building user's installed roles and
+collections to every template build.
 
 ## Layout
 
@@ -66,13 +70,18 @@ Run `python scripts/ludus_source_lint.py --list-rules` for the catalogue. In sho
 - **Templates (T)** – exactly one `*.pkr.hcl` per directory; the Ludus variable block declared with the documented
   types and **no defaults**; every other variable has a default; `vm_name` resolves (as Ludus resolves it) to a
   DNS-valid name ending in `-template` that is unique and does not collide with a builtin or Bad Sector Labs name;
-  a literal `variable "os"` so Ludus can classify the OS; `proxmox_url`, `node`, `insecure_skip_tls_verify`,
-  `pool`, disk storage pool and format, network bridge, ISO/EFI/TPM storage pools and API credentials bound to the
-  Ludus variables rather than hard-coded; no `vm_id`, `template_name` or `skip_convert_to_template`; ansible
-  provisioners set `ANSIBLE_HOME=${var.ansible_home}` and `skip_version_check = true`; every referenced file exists
-  inside the template directory; Windows templates ship `Autounattend.xml` and use WinRM over HTTPS; baked-in
-  credentials match the Ludus `group_vars` for the guest OS; a static `description` (and optional icon) for the
-  catalog. Performance recommendations from the Ludus docs are reported as information.
+  a literal `variable "os"` so Ludus can classify the OS (absent for macOS, which Ludus classifies by name);
+  `proxmox_url`, `node`, `insecure_skip_tls_verify`, `pool`, disk storage pool and format, network bridge,
+  ISO/EFI/TPM storage pools and API credentials bound to the Ludus variables rather than hard-coded; no `vm_id`,
+  `template_name` or `skip_convert_to_template`; current (non-deprecated) Proxmox builder attributes; ansible
+  provisioners set `ANSIBLE_HOME=${var.ansible_home}` and `skip_version_check = true` and never override the
+  roles/collections paths Ludus exports; every referenced file exists inside the template directory and no
+  `requirements.yml` reaches outside it; Ansible content a template runs is installed by Ludus, shipped by this
+  source, or documented as a prerequisite; Windows templates ship `Autounattend.xml` and use WinRM over HTTPS;
+  baked-in credentials match the Ludus `group_vars` for the guest OS; a static `description` (and a real icon or
+  none) for the catalog. Orchestrated templates (`source "null"` driving Proxmox from a `shell-local` provisioner)
+  must hand the same Ludus variables to their orchestration. Performance recommendations from the Ludus docs are
+  reported as information.
 - **Blueprints (B)** – `blueprint.yml` satisfies the Ludus manifest parser (id matches the directory, semver
   version, relative config path); `range-config.yml` validates against the Ludus JSON schema and the offline
   checks the server runs on apply (name charset, unique names/hostnames/IPs, NetBIOS uniqueness); every referenced
@@ -96,6 +105,7 @@ versions from `ludus-server/dependency_updates.go`, the per-OS credentials from
 
 ```bash
 make deps              # Python tooling (python-hcl2, PyYAML, jsonschema, yamllint, ansible-lint, pytest)
+make ansible-deps      # the collections the Ludus server ships + this source's collections, into .tools/ (for ansible-lint)
 make packer-tools      # Packer + plugins at the Ludus-pinned versions, into .tools/ (git-ignored)
 make lint              # every linter: source rules, yamllint, ansible-lint, shellcheck, actionlint
 make packer-validate   # packer fmt -check + packer validate, invoked as the Ludus server does
