@@ -1,0 +1,47 @@
+---
+- name: Download | Ensure the controller cache directory exists
+  ansible.builtin.file:
+    path: "{{ __hv_cache_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Download | Fetch the published artifact, the CA and the client config to the controller (sha256-pinned)
+  ansible.builtin.get_url:
+    url: "{{ __hv_base_url }}/{{ item }}"
+    dest: "{{ __hv_cache_dir }}/{{ item }}"
+    checksum: "sha256:{{ range_homevelo_agent_artifacts[item] }}"
+    validate_certs: "{{ range_homevelo_agent_validate_certs }}"
+    mode: "0600"
+  loop:
+    - "{{ __hv_artifact }}"
+    - "{{ __hv_ca_file }}"
+    - "{{ __hv_published_config }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: __hv_download
+  retries: 3
+  delay: 5
+  until: __hv_download is succeeded
+
+# The published config has no `Client.Crypto.root_certs`; the frontend
+# certificate is issued by the Proxmox cluster CA, so the agent needs that CA in
+# its own trust pool (Velociraptor appends root_certs to it: crypto/root.go,
+# AddDefaultCerts). The merge happens on the controller; the result is what every
+# platform's agent runs on.
+- name: Download | Merge the cluster CA into the client config as a trusted root
+  ansible.builtin.copy:
+    content: >-
+      {{
+        (lookup('ansible.builtin.file', __hv_cache_dir ~ '/' ~ __hv_published_config) | from_yaml)
+        | combine({'Client': {'Crypto': {'root_certs': lookup('ansible.builtin.file', __hv_cache_dir ~ '/' ~ __hv_ca_file) ~ '\n'}}}, recursive=True)
+        | to_nice_yaml(indent=2, width=4096)
+      }}
+    dest: "{{ __hv_merged_config }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  run_once: true

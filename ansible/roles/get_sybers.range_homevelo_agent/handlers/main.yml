@@ -1,0 +1,12 @@
+---
+- name: Refresh the system CA bundle
+  ansible.builtin.command: update-ca-certificates
+  become: true
+  changed_when: true
+
+- name: Restart the Home-Velo Linux agent
+  ansible.builtin.systemd:
+    name: "{{ range_homevelo_agent_linux_service }}"
+    daemon_reload: true
+    state: restarted
+  become: true

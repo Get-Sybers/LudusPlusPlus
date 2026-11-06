@@ -1,0 +1,62 @@
+---
+# Windows. The published MSI installs the binary and registers the "Velociraptor"
+# service running `Velociraptor.exe service run` on its embedded config. Agents
+# installed that way never enrolled from a range while every explicit-config
+# install did, so the service is pointed at the merged config instead
+# (`--config … service run`; doRun → loadClientConfig honours it). Velociraptor's
+# own `service install --config` is no substitute: it copies the file beside the
+# binary and registers plain `service run`. The CA is still imported into
+# LocalMachine\Root, as the server's install.ps1 does.
+
+- name: Windows | Ensure the staging directory exists
+  ansible.windows.win_file:
+    path: 'C:\Windows\Temp\homevelo'
+    state: directory
+
+- name: Windows | Stage the Proxmox CA certificate
+  ansible.windows.win_copy:
+    src: "{{ __hv_cache_dir }}/{{ __hv_ca_file }}"
+    dest: 'C:\Windows\Temp\homevelo\pve-root-ca.crt'
+
+- name: Windows | Trust the Proxmox CA (LocalMachine\Root)
+  ansible.windows.win_certificate_store:
+    path: 'C:\Windows\Temp\homevelo\pve-root-ca.crt'
+    store_location: LocalMachine
+    store_name: Root
+    state: present
+
+- name: Windows | Stage the published MSI
+  ansible.windows.win_copy:
+    src: "{{ __hv_cache_dir }}/{{ __hv_artifact }}"
+    dest: 'C:\Windows\Temp\homevelo\velociraptor-client.msi'
+
+- name: Windows | Install the agent (msiexec /i … /quiet /norestart)
+  ansible.windows.win_package:
+    path: 'C:\Windows\Temp\homevelo\velociraptor-client.msi'
+    state: present
+    arguments: /quiet /norestart
+
+- name: Windows | Write the explicit client config (published config + Proxmox CA as a trusted root)
+  ansible.windows.win_copy:
+    src: "{{ __hv_merged_config }}"
+    dest: "{{ range_homevelo_agent_windows_config }}"
+  register: __hv_win_config
+
+- name: Windows | Point the service at that config
+  ansible.windows.win_service:
+    name: "{{ range_homevelo_agent_windows_service }}"
+    path: '"{{ range_homevelo_agent_windows_install_dir }}\Velociraptor.exe" --config "{{ range_homevelo_agent_windows_config }}" service run'
+    start_mode: auto
+  register: __hv_win_service_path
+
+- name: Windows | Restart the agent when its config or command line changed
+  ansible.windows.win_service:
+    name: "{{ range_homevelo_agent_windows_service }}"
+    state: restarted
+  when: __hv_win_config is changed or __hv_win_service_path is changed
+
+- name: Windows | Ensure the agent service is running
+  ansible.windows.win_service:
+    name: "{{ range_homevelo_agent_windows_service }}"
+    state: started
+    start_mode: auto

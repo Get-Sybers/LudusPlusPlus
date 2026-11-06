@@ -1,0 +1,95 @@
+---
+argument_specs:
+  main:
+    short_description: Install the Home-Velo (Velociraptor) agent on range VMs from the server's public folder.
+    description:
+      - Downloads the Home-Velo server's published client artifact for the host's
+        platform, its Proxmox CA certificate and its client config to the Ansible
+        controller once (every file sha256-pinned), merges the CA into the config
+        as a trusted root, pushes the result to each VM and installs the agent so
+        it reports to the Home-Velo frontend.
+      - Every platform runs the agent on that explicit config. Windows agents
+        left on the MSI's embedded config never enrolled from a range, and macOS
+        keychain trust cannot be granted over SSH; on Linux the agent uses its own
+        binary name, config path and unit so it coexists with the CCXDFIR digger
+        agent. The README has the evidence.
+    options:
+      range_homevelo_agent_server_host:
+        type: str
+        required: false
+        default: 192.168.4.131
+        description: Frontend host of the Home-Velo server (also used by the reachability check).
+      range_homevelo_agent_server_port:
+        type: int
+        required: false
+        default: 8000
+        description: Frontend port.
+      range_homevelo_agent_base_url:
+        type: str
+        required: false
+        default: "https://{{ range_homevelo_agent_server_host }}:{{ range_homevelo_agent_server_port }}/public"
+        description: Base URL of the server's public download folder.
+      range_homevelo_agent_validate_certs:
+        type: bool
+        required: false
+        default: false
+        description: Verify the frontend's TLS certificate when downloading on the controller.
+      range_homevelo_agent_controller_cache_dir:
+        type: str
+        required: false
+        default: /opt/ludus/resources/homevelo
+        description: Controller-side cache directory for the downloaded artifacts and the merged config.
+      range_homevelo_agent_artifacts:
+        type: dict
+        required: false
+        description: Published filename to sha256 map; every download is pinned to it.
+      range_homevelo_agent_windows_service:
+        type: str
+        required: false
+        default: Velociraptor
+        description: Windows service name the published MSI registers.
+      range_homevelo_agent_windows_install_dir:
+        type: str
+        required: false
+        default: 'C:\Program Files\Velociraptor'
+        description: Install directory the MSI uses.
+      range_homevelo_agent_windows_config:
+        type: str
+        required: false
+        default: 'C:\Program Files\Velociraptor\client.config.yaml'
+        description: Explicit client config the Windows service is pointed at.
+      range_homevelo_agent_linux_bin:
+        type: str
+        required: false
+        default: /usr/local/bin/velociraptor-client
+        description: Where the Linux agent binary is installed.
+      range_homevelo_agent_linux_config:
+        type: str
+        required: false
+        default: /etc/velociraptor-homevelo.client.config.yaml
+        description: Where the Linux agent's client config is written.
+      range_homevelo_agent_linux_service:
+        type: str
+        required: false
+        default: velociraptor-homevelo
+        description: Name of the systemd unit the role writes for the Linux agent.
+      range_homevelo_agent_darwin_bin:
+        type: str
+        required: false
+        default: /usr/local/bin/velociraptor-client
+        description: Where the macOS agent binary is placed before `service install`.
+      range_homevelo_agent_darwin_config:
+        type: str
+        required: false
+        default: /etc/velociraptor-homevelo.client.config.yaml
+        description: Where the macOS agent's client config is written.
+      range_homevelo_agent_darwin_label:
+        type: str
+        required: false
+        default: com.velocidex.velociraptor
+        description: launchd label the macOS installer registers.
+      range_homevelo_agent_verify_connectivity:
+        type: bool
+        required: false
+        default: true
+        description: Run a warn-only TCP reachability check to the frontend from each VM after install.

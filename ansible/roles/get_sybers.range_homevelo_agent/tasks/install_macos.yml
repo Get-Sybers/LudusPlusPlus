@@ -1,0 +1,30 @@
+---
+# macOS. The server's install.sh trusts the Proxmox CA with `security
+# add-trusted-cert -d`, which needs an interactive authorization and fails over
+# SSH ("The authorization was denied since no user interaction was possible").
+# The keychain is therefore never touched: the agent runs on the merged config,
+# and `service install --config` writes a launchd plist that keeps --config.
+
+- name: Darwin | Write the client config (published config + Proxmox CA as a trusted root)
+  ansible.builtin.copy:
+    src: "{{ __hv_merged_config }}"
+    dest: "{{ range_homevelo_agent_darwin_config }}"
+    owner: root
+    group: wheel
+    mode: "0600"
+  become: true
+
+- name: Darwin | Install the agent binary
+  ansible.builtin.copy:
+    src: "{{ __hv_cache_dir }}/{{ __hv_artifact }}"
+    dest: "{{ range_homevelo_agent_darwin_bin }}"
+    owner: root
+    group: wheel
+    mode: "0755"
+  become: true
+
+- name: Darwin | Register and start the launchd service with that config
+  ansible.builtin.command: "{{ range_homevelo_agent_darwin_bin }} --config {{ range_homevelo_agent_darwin_config }} service install"
+  become: true
+  args:
+    creates: "/Library/LaunchDaemons/{{ range_homevelo_agent_darwin_label }}.plist"

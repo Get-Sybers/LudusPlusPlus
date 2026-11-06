@@ -1,0 +1,62 @@
+---
+# Warn-only checks: the service is up, and the frontend port answers from the VM.
+# Enrolment itself is confirmed on the server (README).
+
+- name: Verify | Windows service state
+  ansible.windows.win_service_info:
+    name: "{{ range_homevelo_agent_windows_service }}"
+  register: __hv_win_svc
+  when: ansible_os_family == 'Windows'
+
+- name: Verify | Linux unit state
+  ansible.builtin.service_facts:
+  when: ansible_os_family == 'Debian'
+
+- name: Verify | MacOS daemon state
+  ansible.builtin.command: "launchctl print system/{{ range_homevelo_agent_darwin_label }}"
+  become: true
+  register: __hv_mac_svc
+  changed_when: false
+  failed_when: false
+  when: ansible_system == 'Darwin'
+
+- name: Verify | Frontend reachability from this VM (Windows)
+  ansible.windows.win_wait_for:
+    host: "{{ range_homevelo_agent_server_host }}"
+    port: "{{ range_homevelo_agent_server_port }}"
+    timeout: 15
+  register: __hv_tcp_win
+  failed_when: false
+  when:
+    - range_homevelo_agent_verify_connectivity | bool
+    - ansible_os_family == 'Windows'
+
+- name: Verify | Frontend reachability from this VM (Unix)
+  ansible.builtin.wait_for:
+    host: "{{ range_homevelo_agent_server_host }}"
+    port: "{{ range_homevelo_agent_server_port }}"
+    timeout: 15
+  register: __hv_tcp_unix
+  failed_when: false
+  when:
+    - range_homevelo_agent_verify_connectivity | bool
+    - ansible_os_family != 'Windows'
+
+- name: Verify | Summarise the service state and the frontend probe
+  ansible.builtin.set_fact:
+    __hv_service_state: >-
+      {{
+        (__hv_win_svc.services[0].state | default('unknown')) if ansible_os_family == 'Windows'
+        else ((ansible_facts.services[range_homevelo_agent_linux_service ~ '.service'] | default({})).state | default('unknown'))
+        if ansible_os_family == 'Debian'
+        else ('loaded' if (__hv_mac_svc.rc | default(1)) == 0 else 'not loaded')
+      }}
+    __hv_frontend_ok: >-
+      {{
+        ((__hv_tcp_win.failed | default(true)) == false) if ansible_os_family == 'Windows'
+        else ((__hv_tcp_unix.failed | default(true)) == false)
+      }}
+
+- name: Verify | Report
+  ansible.builtin.debug:
+    msg: "[homevelo] {{ inventory_hostname }}: service={{ __hv_service_state }} frontend_tcp={{ 'ok' if __hv_frontend_ok | bool else 'UNREACHABLE' }}"

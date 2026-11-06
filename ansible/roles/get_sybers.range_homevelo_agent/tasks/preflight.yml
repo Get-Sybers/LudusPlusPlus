@@ -1,0 +1,28 @@
+---
+- name: Preflight | Resolve the role's variables into facts
+  ansible.builtin.set_fact:
+    __hv_base_url: "{{ range_homevelo_agent_base_url }}"
+    __hv_cache_dir: "{{ range_homevelo_agent_controller_cache_dir }}"
+    __hv_ca_file: pve-root-ca.crt
+    __hv_published_config: client.config.yaml
+    __hv_merged_config: "{{ range_homevelo_agent_controller_cache_dir }}/client.config.homevelo.yaml"
+    __hv_artifact: >-
+      {{
+        'velociraptor-client-amd64.msi' if ansible_os_family == 'Windows'
+        else 'velociraptor-linux-amd64' if ansible_os_family == 'Debian'
+        else 'velociraptor-darwin-amd64' if (ansible_system == 'Darwin' and ansible_architecture != 'arm64')
+        else ''
+      }}
+
+- name: Preflight | Stop on a platform this role does not cover
+  ansible.builtin.meta: end_host
+  when: __hv_artifact | trim | length == 0
+
+- name: Preflight | Require a sha256 pin for everything this host will receive
+  ansible.builtin.assert:
+    that:
+      - __hv_artifact in range_homevelo_agent_artifacts
+      - __hv_ca_file in range_homevelo_agent_artifacts
+      - __hv_published_config in range_homevelo_agent_artifacts
+    fail_msg: "No sha256 pin for {{ __hv_artifact }}, {{ __hv_ca_file }} or {{ __hv_published_config }} in range_homevelo_agent_artifacts."
+    quiet: true
