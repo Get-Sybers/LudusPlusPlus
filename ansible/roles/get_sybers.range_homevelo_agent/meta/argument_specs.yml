@@ -17,8 +17,10 @@ argument_specs:
       range_homevelo_agent_server_host:
         type: str
         required: false
-        default: 192.168.4.131
-        description: Frontend host of the Home-Velo server (also used by the reachability check).
+        default: 203.0.113.10
+        description:
+          - Frontend host of the Home-Velo server (also used by the reachability check).
+          - The default is an RFC 5737 placeholder; set the real address in global_role_vars.
       range_homevelo_agent_server_port:
         type: int
         required: false

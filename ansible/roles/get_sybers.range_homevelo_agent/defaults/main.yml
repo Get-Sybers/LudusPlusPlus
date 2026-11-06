@@ -5,7 +5,9 @@
 
 # The Home-Velo server: its frontend host/port, and the public download folder
 # the server publishes its client artifacts, CA certificate and client config in.
-range_homevelo_agent_server_host: 192.168.4.131
+# The host default is an RFC 5737 placeholder: set the real address in the range
+# config's global_role_vars (range_homevelo_agent_server_host).
+range_homevelo_agent_server_host: 203.0.113.10
 range_homevelo_agent_server_port: 8000
 range_homevelo_agent_base_url: "https://{{ range_homevelo_agent_server_host }}:{{ range_homevelo_agent_server_port }}/public"
 

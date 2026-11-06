@@ -19,8 +19,10 @@ Ludus conventions — are documented here. The format is
   CCXDFIR digger agent, on macOS `service install --config` registers the launchd daemon. The README
   records why: agents left on the MSI's embedded config never enrolled from a range, macOS keychain
   trust cannot be granted over SSH, and the stock Linux installer overwrites digger's unit. Verified
-  on an FGNW range on 2026-11-07: all 20 VMs enrolled. `ansible/roles/README.md` now also states
-  that Ludus takes `galaxy_info.namespace` for the installed name when it is set.
+  on a range spanning all three platforms. The server's address is a `global_role_vars` input
+  (`range_homevelo_agent_server_host`; the default is a documentation placeholder).
+  `ansible/roles/README.md` now also states that Ludus takes `galaxy_info.namespace` for the
+  installed name when it is set.
 
 ### Fixed — the AppX-fix images disable the Edge updater's scheduled tasks too (from FGNW)
 

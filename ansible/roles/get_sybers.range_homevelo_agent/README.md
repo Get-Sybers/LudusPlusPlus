@@ -12,11 +12,11 @@ folder at deploy time, sha256-pinned, and merged on the Ludus host. The role run
 
 | | |
 | --- | --- |
-| Home-Velo | Proxmox VM 9400 on beef-pi, `vmbr0`, **192.168.4.131**, Debian 13, Velociraptor **0.77.3** |
-| frontend / GUI | `https://192.168.4.131:8000/` (clients) and `:8889` (GUI); `use_self_signed_ssl: false`; the frontend certificate is issued by the **PVE Cluster Manager CA** with SAN `192.168.4.131` |
-| public folder | `https://192.168.4.131:8000/public/`: `velociraptor-client-amd64.msi` (repacked), `velociraptor-linux-amd64`, `velociraptor-darwin-amd64`, `pve-root-ca.crt`, `client.config.yaml`, `install.sh`, `install.ps1`, `AGENT_VERSION` |
-| server firewall | an iptables chain admits `192.168.4.0/24` on 8000/8889 and drops the rest; range traffic arrives as the Ludus host's address (router NAT, then host NAT) and is admitted |
-| containment | a contained range (`ludus testing start`) drops all egress; run `ludus testing allow -i 192.168.4.131` after every `testing start`, or keep the address in the operator allow-list the FGNW blueprint documents |
+| Home-Velo | a Velociraptor **0.77.3** server on the operator's network; its address is `range_homevelo_agent_server_host` (set it in the range config's `global_role_vars`, the default is an RFC 5737 placeholder) |
+| frontend / GUI | `https://<server-host>:8000/` (clients) and `:8889` (GUI); `use_self_signed_ssl: false`; the frontend certificate is issued by the **PVE Cluster Manager CA** of the Proxmox cluster with a SAN for the server's address |
+| public folder | `https://<server-host>:8000/public/`: `velociraptor-client-amd64.msi` (repacked), `velociraptor-linux-amd64`, `velociraptor-darwin-amd64`, `pve-root-ca.crt`, `client.config.yaml`, `install.sh`, `install.ps1`, `AGENT_VERSION` |
+| server firewall | the server's host firewall admits its own LAN on 8000/8889; range traffic arrives as the Ludus host's address (router NAT, then host NAT) and is admitted |
+| containment | a contained range (`ludus testing start`) drops all egress; run `ludus testing allow -i <server-host>` after every `testing start`, or keep the address in an operator allow-list applied with `ludus testing allow -f` |
 
 ## What the role does
 
@@ -33,9 +33,9 @@ folder at deploy time, sha256-pinned, and merged on the Ludus host. The role run
 Three things that look right do **not** work from a range:
 
 1. **The MSI's embedded config.** Installed as published (`msiexec /i … /quiet`, service on the embedded
-   config), 15 Windows agents ran for over 20 minutes with the service started and the frontend port
-   reachable, held no connection to the frontend and never enrolled. The same hosts enrolled within a
-   minute once the service was pointed at the explicit config. Velociraptor's own
+   config), the Windows agents of a test range ran for over 20 minutes with the service started and
+   the frontend port reachable, held no connection to the frontend and never enrolled. The same hosts
+   enrolled within a minute once the service was pointed at the explicit config. Velociraptor's own
    `service install --config` is no substitute: it copies the config beside the binary and registers
    plain `service run`, so the embedded config still wins. Setting the service path is what works.
 2. **macOS keychain trust over SSH.** `install.sh` runs `security add-trusted-cert -d -r trustRoot -k
@@ -54,7 +54,7 @@ Three things that look right do **not** work from a range:
 
 | name | default | purpose |
 | --- | --- | --- |
-| `range_homevelo_agent_server_host` / `_server_port` | `192.168.4.131` / `8000` | the frontend; also the reachability check target |
+| `range_homevelo_agent_server_host` / `_server_port` | `203.0.113.10` (placeholder — set yours) / `8000` | the frontend; also the reachability check target |
 | `range_homevelo_agent_base_url` | `https://<host>:<port>/public` | the server's public download folder |
 | `range_homevelo_agent_artifacts` | see `defaults/main.yml` | filename → sha256 pins (recorded 2026-11-06, AGENT_VERSION 0.77.3) |
 | `range_homevelo_agent_validate_certs` | `false` | controller-side TLS verification of the download (integrity comes from the pins) |
@@ -68,7 +68,10 @@ Three things that look right do **not** work from a range:
 
 ```bash
 # installed per user by `ludus source add <this source> --all` (or --source-roles get_sybers.range_homevelo_agent);
-# then add get_sybers.range_homevelo_agent to each VM's roles: in the range config and
+# then, in the range config, set the server under global_role_vars:
+#   global_role_vars:
+#     range_homevelo_agent_server_host: <your Home-Velo address>
+# add get_sybers.range_homevelo_agent to each VM's roles:, apply it with `ludus range config set`, and
 ludus range deploy -t user-defined-roles --only-roles get_sybers.range_homevelo_agent [--limit localhost,<vm>,...]
 ```
 
@@ -85,13 +88,12 @@ client keys and identifiers):
 ```bash
 ls -d /opt/velociraptor/clients/C.*/ | wc -l                                  # enrolled clients
 ls /opt/velociraptor/clients/C.*.db | wc -l                                   # interrogated (have hostname/OS)
-grep -ahoE 'JB-[A-Za-z0-9-]+' /opt/velociraptor/clients/C.*.db | sort -u     # range hostnames seen
+grep -ahoE '<range-id>-[A-Za-z0-9-]+' /opt/velociraptor/clients/C.*.db | sort -u   # range hostnames seen
 ss -tn state established '( sport = :8000 )' | grep -c <ludus-host-ip>        # live range connections (+1 if the Ludus host runs an agent)
 ```
 
-Verified 2026-11-07 on an FGNW range: all 20 VMs enrolled (15 Windows, 3 Linux, 2 macOS) with 21 live
-connections from the range's NAT address; the Windows agents enrolled within two minutes of the
-service being pointed at the explicit config.
+Verified on a range spanning all three platforms: every VM enrolled, and the Windows agents enrolled
+within two minutes of the service being pointed at the explicit config.
 
 ## When the server republishes
 
