@@ -7,6 +7,19 @@ Ludus conventions — are documented here. The format is
 
 ## [Unreleased]
 
+### Fixed — the AppX-fix images disable the Edge updater's scheduled tasks too (from FGNW)
+
+- `remove-appx-sysprep-blockers.ps1` in `win2022-server-x64-appxfix`, `win2022-exchange2019-x64`,
+  `win10-22h2-x64-enterprise-appxfix` and `win11-22h2-x64-enterprise-appxfix` now stops a running
+  updater, stops and disables the `MicrosoftEdgeUpdateTaskMachineCore` / `…UA` scheduled tasks and
+  sets `UpdateDefault`, `Update{56EB18F8-…}` (the Stable channel) and `AutoUpdateCheckPeriodMinutes`
+  to 0, not only the two services. The tasks launch `MicrosoftEdgeUpdate.exe` directly, so on a
+  deployed clone the updater still ran, installed a newer Edge, and Edge's installer registered the
+  `Microsoft.MicrosoftEdge.Stable` sparse package for the logged-on user; the first deploy-time
+  Sysprep then failed on it (0x80073cf2) and fell back to Ludus's remove-and-retry rescue. The
+  Windows 10 and 11 images had no updater handling at all. Synced from FGNW `dd948fa`; rebuild the
+  four templates to pick it up.
+
 ### Changed — the templates follow Get-Sybers/FGNW
 
 - The five templates FGNW maintains (`ninjasploitable`, `win2022-server-x64-appxfix`,
