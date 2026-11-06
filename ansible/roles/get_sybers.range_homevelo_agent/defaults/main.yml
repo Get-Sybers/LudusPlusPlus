@@ -1,0 +1,59 @@
+---
+# Public variables for get_sybers.range_homevelo_agent, validated by
+# meta/argument_specs.yml. preflight.yml resolves them into the internal __hv_*
+# facts the task files use.
+
+# The Home-Velo server: its frontend host/port, and the public download folder
+# the server publishes its client artifacts, CA certificate and client config in.
+# The host default is an RFC 5737 placeholder: set the real address in the range
+# config's global_role_vars (range_homevelo_agent_server_host).
+range_homevelo_agent_server_host: 203.0.113.10
+range_homevelo_agent_server_port: 8000
+range_homevelo_agent_base_url: "https://{{ range_homevelo_agent_server_host }}:{{ range_homevelo_agent_server_port }}/public"
+
+# The frontend serves over a certificate issued by the Proxmox cluster CA, which
+# the Ludus host does not trust. Downloads therefore skip TLS verification and
+# rely on the sha256 pins below for integrity. (The guests do verify the server:
+# the same CA is placed in the agent's config as a trusted root.)
+range_homevelo_agent_validate_certs: false
+
+# Directory on the Ansible controller (the Ludus host) used to cache the
+# published artifacts once, then push them to each VM (isolation-friendly).
+range_homevelo_agent_controller_cache_dir: /opt/ludus/resources/homevelo
+
+# Published artifacts and their sha256, recorded 2026-11-06 from the public
+# folder (AGENT_VERSION 0.77.3; files dated 2026-10-11). When the server
+# republishes, recompute with `sha256sum` and bump these.
+range_homevelo_agent_artifacts:
+  velociraptor-client-amd64.msi: a35b6c30ca07091507918abb9e9bf990d03b577cb3af56e3d725607a58d37276
+  velociraptor-linux-amd64: 07632f79157b032fdd7960884815497f2c120de4bddc40d001e9d12e87c0c384
+  velociraptor-darwin-amd64: 4c4997ad48ed6c92357b0b3d6c74412e30827bfc2b02749335879f6e2ee35ab5
+  pve-root-ca.crt: 239101c03a5c6ca2f8756f3d4ab82055abf46a5a2766e31ab7b26534cc05a302
+  client.config.yaml: c4547f6d708b4300678f827bc0a4e212bd30e8c8929dd50e8bcef5c37d1c4328
+
+# Windows: the published MSI installs the binary and the "Velociraptor" service;
+# the service is then pointed at the explicit config below with
+# `--config … service run`. Agents left on the MSI's embedded config never
+# enrolled from a range (README).
+range_homevelo_agent_windows_service: Velociraptor
+range_homevelo_agent_windows_install_dir: 'C:\Program Files\Velociraptor'
+range_homevelo_agent_windows_config: 'C:\Program Files\Velociraptor\client.config.yaml'
+
+# Linux: the agent is installed under its own names so it coexists with the
+# CCXDFIR digger agent, whose .deb owns /usr/local/bin/velociraptor_client and
+# velociraptor_client.service — exactly what `velociraptor service install`
+# would write, so this role never calls it on Linux.
+range_homevelo_agent_linux_bin: /usr/local/bin/velociraptor-client
+range_homevelo_agent_linux_config: /etc/velociraptor-homevelo.client.config.yaml
+range_homevelo_agent_linux_service: velociraptor-homevelo
+
+# macOS: `velociraptor-client --config <file> service install` registers the
+# launchd label from the config. The keychain is never touched: trusting the CA
+# there (`security add-trusted-cert -d`) needs an interactive authorization an
+# SSH session cannot give.
+range_homevelo_agent_darwin_bin: /usr/local/bin/velociraptor-client
+range_homevelo_agent_darwin_config: /etc/velociraptor-homevelo.client.config.yaml
+range_homevelo_agent_darwin_label: com.velocidex.velociraptor
+
+# Post-install check from each VM: TCP to the frontend. Warn-only.
+range_homevelo_agent_verify_connectivity: true

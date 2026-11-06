@@ -7,6 +7,23 @@ Ludus conventions — are documented here. The format is
 
 ## [Unreleased]
 
+### Added — the Home-Velo Velociraptor agent role
+
+- `ansible/roles/get_sybers.range_homevelo_agent` installs the Home-Velo Velociraptor agent on range
+  VMs — Windows, Debian-family Linux and macOS — from the server's public folder. The artifact, the
+  Proxmox cluster CA and the published client config are downloaded once to the Ludus host
+  (sha256-pinned; nothing secret lives in the role), the CA is merged into the config as
+  `Client.Crypto.root_certs`, and every platform runs the agent on that explicit config: on
+  Windows the published MSI's service is pointed at it with `--config … service run`, on Linux the
+  agent gets its own binary, config path and `velociraptor-homevelo` unit so it coexists with the
+  CCXDFIR digger agent, on macOS `service install --config` registers the launchd daemon. The README
+  records why: agents left on the MSI's embedded config never enrolled from a range, macOS keychain
+  trust cannot be granted over SSH, and the stock Linux installer overwrites digger's unit. Verified
+  on a range spanning all three platforms. The server's address is a `global_role_vars` input
+  (`range_homevelo_agent_server_host`; the default is a documentation placeholder).
+  `ansible/roles/README.md` now also states that Ludus takes `galaxy_info.namespace` for the
+  installed name when it is set.
+
 ### Fixed — the AppX-fix images disable the Edge updater's scheduled tasks too (from FGNW)
 
 - `remove-appx-sysprep-blockers.ps1` in `win2022-server-x64-appxfix`, `win2022-exchange2019-x64`,

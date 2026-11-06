@@ -6,6 +6,7 @@ name: "LudusPlusPlus"
 description: >-
   Get-Sybers Packer templates for Ludus (Debian, AppX-sysprep-fixed Windows, Exchange 2019,
   FLARE VM, Metasploitable 2/3, OpenCore macOS), the get_sybers.templates build collection,
+  the get_sybers.range_homevelo_agent role (the Home-Velo Velociraptor agent for range VMs),
   and CI that enforces the native Ludus template and source conventions.
 authors:
   - "Get-Sybers"

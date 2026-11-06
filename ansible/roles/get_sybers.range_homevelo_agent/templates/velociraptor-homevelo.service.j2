@@ -1,0 +1,14 @@
+[Unit]
+Description=Velociraptor client (Home-Velo) — managed by get_sybers.range_homevelo_agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{ range_homevelo_agent_linux_bin }} --config {{ range_homevelo_agent_linux_config }} client --quiet
+Restart=always
+RestartSec=10
+LimitNOFILE=20000
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,3 @@
+---
+# Shown by `ludus ansible role list` / the Ludus catalog (ansible/roles/README.md).
+version: "0.1.0"

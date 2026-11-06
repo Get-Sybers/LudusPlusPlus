@@ -1,0 +1,40 @@
+---
+# Install the Home-Velo (Velociraptor 0.77.3) agent on a range VM.
+#
+# The Home-Velo server publishes its client artifacts, its Proxmox CA certificate,
+# its client config and one-line install scripts at <frontend>/public/. This role
+# does what those scripts do, with modules: download once to the Ludus host
+# (sha256-pinned), merge the CA into the client config as a trusted root, push
+# the result to the VM, install, start. Nothing secret is carried in the role:
+# the client config (which holds the enrolment nonce) is fetched at deploy time.
+#
+# On EVERY platform the agent runs on that explicit config:
+#   Windows  the published MSI installs binary + service; the service is then
+#            pointed at the config (`--config … service run`). Agents left on the
+#            MSI's embedded config never enrolled from a range.
+#   Linux    own binary name, config path and unit, so the CCXDFIR digger agent's
+#            .deb (which owns /usr/local/bin/velociraptor_client and
+#            velociraptor_client.service) is left alone.
+#   macOS    `service install --config`; the keychain is never touched because
+#            `security add-trusted-cert -d` fails over SSH.
+
+- name: Resolve variables and select the artifact for this host
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Cache the published artifacts on the controller and merge the CA into the client config
+  ansible.builtin.include_tasks: download.yml
+
+- name: Install on Windows
+  ansible.builtin.include_tasks: install_windows.yml
+  when: ansible_os_family == 'Windows'
+
+- name: Install on Linux (Debian family)
+  ansible.builtin.include_tasks: install_linux.yml
+  when: ansible_os_family == 'Debian'
+
+- name: Install on macOS
+  ansible.builtin.include_tasks: install_macos.yml
+  when: ansible_system == 'Darwin'
+
+- name: Verify the agent service and frontend reachability
+  ansible.builtin.include_tasks: verify.yml

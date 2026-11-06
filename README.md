@@ -24,6 +24,7 @@ ludus range deploy
 | --- | --- | --- |
 | Packer templates | 14 — see [`templates/`](templates/README.md) | Debian 13 base, Ninjasploitable, the AppX-sysprep-fixed Windows 10/11/Server 2022 images, Server 2022 + Exchange 2019, FLARE VM, Metasploitable 2/3 (imported images) and five OpenCore-booted macOS releases. |
 | Blueprint | `example` | One VM from the Debian 13 template; proves the source installs and deploys end to end. See [`blueprints/`](blueprints/README.md). |
+| Ansible role | `get_sybers.range_homevelo_agent` | Installs the Home-Velo Velociraptor agent on range VMs (Windows, Linux, macOS) from the server's public folder, on an explicit config that trusts the Proxmox cluster CA. See [`ansible/roles/`](ansible/roles/README.md). |
 | Ansible collection | `get_sybers.templates` | The template-build content the Windows, macOS and Metasploitable templates run (ngen, the unattended OpenCore macOS build, imported-image provisioning). Maintained in [Get-Sybers/FGNW](https://github.com/Get-Sybers/FGNW); this copy adds the Metasploitable role. See [`ansible/`](ansible/README.md). |
 
 The five templates FGNW also ships (`ninjasploitable`, the two Server 2022 images, Windows 10 AppX-fix, macOS
